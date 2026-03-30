@@ -1,0 +1,15 @@
+{
+    "hotkey": "alt_r",
+    "hotkey_mode": "hold",
+    "asr_mode": "2pass",
+    "server_host": "127.0.0.1",
+    "server_port": 10095,
+    "ncpu": 4,
+    "auto_start_server": true,
+    "overlay_font_size": 16,
+    "formatting": {
+        "auto_spacing": true,
+        "capitalize": true,
+        "replacements": {}
+    }
+}

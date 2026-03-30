@@ -1,0 +1,4 @@
+# 热词列表，每行一个
+# 示例：
+# FunASR
+# Paraformer
