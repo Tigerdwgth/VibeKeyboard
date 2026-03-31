@@ -1,79 +1,96 @@
-"""全局快捷键监听模块"""
+"""全局快捷键监听模块 — 双击 Option 触发"""
 
 import logging
+import time
 from typing import Callable
-
-from pynput import keyboard
 
 logger = logging.getLogger(__name__)
 
-# 快捷键名称到 pynput Key 的映射
-KEY_MAP = {
-    "alt_r": keyboard.Key.alt_r,
-    "alt_l": keyboard.Key.alt_l,
-    "ctrl_r": keyboard.Key.ctrl_r,
-    "ctrl_l": keyboard.Key.ctrl_l,
-    "shift_r": keyboard.Key.shift_r,
-    "cmd_r": keyboard.Key.cmd_r,
-}
+try:
+    from Cocoa import NSEvent, NSFlagsChangedMask, NSKeyDownMask
+    HAS_APPKIT = True
+except ImportError:
+    HAS_APPKIT = False
+    logger.error("pyobjc-framework-Cocoa 未安装")
+
+FLAG_OPTION = 1 << 19  # NSEventModifierFlagOption
+KEY_ESCAPE = 53
+DOUBLE_TAP_INTERVAL = 0.35  # 双击间隔（秒）
 
 
 class HotkeyListener:
-    """按住触发键录音，松开停止
-
-    默认使用 Right Option (alt_r) 作为触发键。
-    需要 macOS 辅助功能权限。
-    """
+    """双击 Option 开始录音，再双击 Option 停止录音。"""
 
     def __init__(
         self,
-        trigger_key: str = "alt_r",
         on_press: Callable[[], None] | None = None,
         on_release: Callable[[], None] | None = None,
+        on_cancel: Callable[[], None] | None = None,
     ):
-        self.trigger_key = KEY_MAP.get(trigger_key, keyboard.Key.alt_r)
         self.on_press = on_press
         self.on_release = on_release
-        self._is_pressed = False
-        self._listener: keyboard.Listener | None = None
+        self.on_cancel = on_cancel
+        self._recording = False
+        self._last_option_up = 0.0  # 上次 Option 松开的时间
+        self._option_held = False
+        self._monitors = []
 
-    def _on_press(self, key):
-        if key == self.trigger_key and not self._is_pressed:
-            self._is_pressed = True
-            logger.debug("触发键按下")
-            if self.on_press:
-                try:
-                    self.on_press()
-                except Exception as e:
-                    logger.error(f"on_press 回调异常: {e}")
+    def _handle_flags_changed(self, event):
+        flags = event.modifierFlags()
+        option_now = bool(flags & FLAG_OPTION)
 
-    def _on_release(self, key):
-        if key == self.trigger_key and self._is_pressed:
-            self._is_pressed = False
-            logger.debug("触发键松开")
-            if self.on_release:
+        if option_now and not self._option_held:
+            # Option 按下
+            self._option_held = True
+
+        elif not option_now and self._option_held:
+            # Option 松开 — 检测双击
+            self._option_held = False
+            now = time.time()
+            interval = now - self._last_option_up
+
+            if interval < DOUBLE_TAP_INTERVAL:
+                # 双击检测成功 — 统一用 on_press 回调（toggle 逻辑在 main 里处理）
+                self._last_option_up = 0.0  # 重置防止三连击
+                logger.info("双击 Option 触发")
+                if self.on_press:
+                    try:
+                        self.on_press()
+                    except Exception as e:
+                        logger.error(f"on_press 异常: {e}")
+            else:
+                self._last_option_up = now
+
+    def _handle_key_down(self, event):
+        if event.keyCode() == KEY_ESCAPE:
+            logger.info("ESC 按下，取消录音")
+            if self.on_cancel:
                 try:
-                    self.on_release()
+                    self.on_cancel()
                 except Exception as e:
-                    logger.error(f"on_release 回调异常: {e}")
+                    logger.error(f"on_cancel 异常: {e}")
 
     def start(self):
-        """启动热键监听（守护线程）"""
-        self._listener = keyboard.Listener(
-            on_press=self._on_press,
-            on_release=self._on_release,
+        if not HAS_APPKIT:
+            logger.error("无法启动热键监听：缺少 AppKit")
+            return
+
+        m1 = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
+            NSFlagsChangedMask, self._handle_flags_changed
         )
-        self._listener.daemon = True
-        self._listener.start()
-        logger.info(f"热键监听已启动，触发键: {self.trigger_key}")
+        m2 = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
+            NSKeyDownMask, self._handle_key_down
+        )
+        self._monitors = [m1, m2]
+        logger.info("热键监听已启动（NSEvent），触发键: 双击 Option, ESC 取消")
 
     def stop(self):
-        """停止热键监听"""
-        if self._listener:
-            self._listener.stop()
-            self._listener = None
+        for m in self._monitors:
+            if m:
+                NSEvent.removeMonitor_(m)
+        self._monitors = []
         logger.info("热键监听已停止")
 
     @property
     def is_pressed(self) -> bool:
-        return self._is_pressed
+        return self._recording

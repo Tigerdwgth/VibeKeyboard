@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 FUNASR_RUNTIME_REPO = "https://github.com/modelscope/FunASR.git"
 FUNASR_SERVER_SCRIPT = "funasr_wss_server.py"
 
-# 默认模型名称（ModelScope 会自动下载）
+# 默认模型名称（与 funasr_wss_server.py 默认值一致，ModelScope 自动下载）
 DEFAULT_MODELS = {
-    "asr_model": "iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
+    "asr_model": "iic/speech_paraformer-large-contextual_asr_nat-zh-cn-16k-common-vocab8404",
     "asr_model_online": "iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online",
     "vad_model": "iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
     "punc_model": "iic/punc_ct-transformer_cn-en-common-vocab471067-large",
@@ -79,7 +79,11 @@ class FunASRServerLauncher:
         return script_path
 
     def _build_command(self, script_path: Path) -> list[str]:
-        """构建服务启动命令"""
+        """构建服务启动命令
+
+        不显式传 --asr_model 等参数，使用 funasr_wss_server.py 脚本自带默认值，
+        这样能确保与脚本版本保持一致，避免模型名不匹配。
+        """
         cmd = [
             sys.executable,
             str(script_path),
@@ -88,13 +92,8 @@ class FunASRServerLauncher:
             "--device", self.device,
             "--ngpu", "0",
             "--ncpu", str(self.ncpu),
+            "--certfile", "",  # 禁用 SSL，本地通信不需要
         ]
-
-        for key, model_name in DEFAULT_MODELS.items():
-            cmd.extend([f"--{key}", model_name])
-
-        if self.hotword_file and os.path.exists(self.hotword_file):
-            cmd.extend(["--hotword", self.hotword_file])
 
         return cmd
 
@@ -155,7 +154,7 @@ class FunASRServerLauncher:
         if on_progress:
             on_progress("等待 FunASR 服务就绪...")
 
-        if self._wait_for_port(timeout=180):
+        if self._wait_for_port(timeout=600):
             logger.info(f"FunASR 服务已就绪: ws://{self.host}:{self.port}")
             if on_progress:
                 on_progress("FunASR 服务已就绪")

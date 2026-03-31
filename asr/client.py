@@ -61,6 +61,7 @@ class ASRClient:
         try:
             async with websockets.connect(
                 self.server_url,
+                subprotocols=["binary"],
                 max_size=None,
                 ping_interval=None,
             ) as ws:
@@ -73,7 +74,13 @@ class ASRClient:
                 send_task = asyncio.create_task(self._send_audio(ws, recorder))
                 recv_task = asyncio.create_task(self._recv_results(ws))
 
-                await asyncio.gather(send_task, recv_task)
+                # send 完成后给 recv 最多 30 秒等最终结果
+                await send_task
+                try:
+                    await asyncio.wait_for(recv_task, timeout=30)
+                except asyncio.TimeoutError:
+                    logger.warning("等待最终结果超时（30s），强制结束")
+                    recv_task.cancel()
 
         except websockets.exceptions.ConnectionClosed as e:
             logger.warning(f"WebSocket 连接关闭: {e}")
@@ -103,33 +110,44 @@ class ASRClient:
 
     async def _recv_results(self, ws):
         """接收 ASR 识别结果"""
-        async for message in ws:
-            try:
-                result = json.loads(message)
-            except json.JSONDecodeError:
-                logger.warning(f"非 JSON 消息: {message[:100]}")
-                continue
+        final_text = ""
+        try:
+            async for message in ws:
+                try:
+                    result = json.loads(message)
+                except json.JSONDecodeError:
+                    logger.warning(f"非 JSON 消息: {message[:100]}")
+                    continue
 
-            text = result.get("text", "")
-            mode = result.get("mode", "")
-            is_final = result.get("is_final", False)
+                text = result.get("text", "")
+                mode = result.get("mode", "")
+                is_final = result.get("is_final", False)
 
-            logger.debug(f"ASR 结果 [{mode}]: {text}")
+                logger.info(f"ASR 结果: mode={mode}, is_final={is_final}, text={text[:80]}")
 
-            if mode == "2pass-online" and self.on_partial_result:
-                # 流式中间结果
-                self.on_partial_result(text)
-            elif mode == "2pass-offline" and self.on_final_result:
-                # 离线最终结果
-                self.on_final_result(text)
-            elif mode == "online" and self.on_partial_result:
-                self.on_partial_result(text)
-            elif mode == "offline" and self.on_final_result:
-                self.on_final_result(text)
+                # 中间结果
+                if "online" in mode and self.on_partial_result:
+                    self.on_partial_result(text)
 
-            if is_final:
-                logger.info("收到最终结果，ASR 会话结束")
-                break
+                # 最终结果（offline 模式返回）
+                if "offline" in mode:
+                    final_text = text
+
+                if is_final:
+                    logger.info("收到 is_final 标记，会话结束")
+                    break
+
+        except asyncio.TimeoutError:
+            logger.warning("接收结果超时")
+        except websockets.exceptions.ConnectionClosed:
+            logger.info("WebSocket 连接已关闭")
+
+        # 确保最终结果被回调
+        if final_text and self.on_final_result:
+            self.on_final_result(final_text)
+        elif not final_text and self.on_final_result:
+            # 没收到 offline 结果，可能只有空结果
+            self.on_final_result("")
 
     async def transcribe_audio(self, audio_data: bytes) -> str | None:
         """离线转写一段音频（非流式）
@@ -143,6 +161,7 @@ class ASRClient:
         try:
             async with websockets.connect(
                 self.server_url,
+                subprotocols=["binary"],
                 max_size=None,
                 ping_interval=None,
             ) as ws:

@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+*.log
+*.egg-info/
+dist/
+build/
+.DS_Store
+voice-input.log
+resources/*.png
+resources/*.icns
