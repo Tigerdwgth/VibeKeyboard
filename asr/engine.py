@@ -62,8 +62,8 @@ class ASREngine:
             logger.error("模型未加载")
             return ""
 
-        # bytes → numpy float32
-        audio = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+        audio = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32)
+        audio /= 32768.0
 
         if len(audio) < sample_rate * 0.3:
             return ""

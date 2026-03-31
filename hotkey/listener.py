@@ -13,25 +13,22 @@ except ImportError:
     HAS_APPKIT = False
     logger.error("pyobjc-framework-Cocoa 未安装")
 
-FLAG_OPTION = 1 << 19  # NSEventModifierFlagOption
+FLAG_OPTION = 1 << 19
 KEY_ESCAPE = 53
-DOUBLE_TAP_INTERVAL = 0.35  # 双击间隔（秒）
+DOUBLE_TAP_INTERVAL = 0.35
 
 
 class HotkeyListener:
-    """双击 Option 开始录音，再双击 Option 停止录音。"""
+    """双击 Option 开始/停止录音，ESC 取消。"""
 
     def __init__(
         self,
         on_press: Callable[[], None] | None = None,
-        on_release: Callable[[], None] | None = None,
         on_cancel: Callable[[], None] | None = None,
     ):
         self.on_press = on_press
-        self.on_release = on_release
         self.on_cancel = on_cancel
-        self._recording = False
-        self._last_option_up = 0.0  # 上次 Option 松开的时间
+        self._last_option_up = 0.0
         self._option_held = False
         self._monitors = []
 
@@ -40,18 +37,12 @@ class HotkeyListener:
         option_now = bool(flags & FLAG_OPTION)
 
         if option_now and not self._option_held:
-            # Option 按下
             self._option_held = True
-
         elif not option_now and self._option_held:
-            # Option 松开 — 检测双击
             self._option_held = False
             now = time.time()
-            interval = now - self._last_option_up
-
-            if interval < DOUBLE_TAP_INTERVAL:
-                # 双击检测成功 — 统一用 on_press 回调（toggle 逻辑在 main 里处理）
-                self._last_option_up = 0.0  # 重置防止三连击
+            if now - self._last_option_up < DOUBLE_TAP_INTERVAL:
+                self._last_option_up = 0.0
                 logger.info("双击 Option 触发")
                 if self.on_press:
                     try:
@@ -74,7 +65,6 @@ class HotkeyListener:
         if not HAS_APPKIT:
             logger.error("无法启动热键监听：缺少 AppKit")
             return
-
         m1 = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
             NSFlagsChangedMask, self._handle_flags_changed
         )
@@ -82,7 +72,7 @@ class HotkeyListener:
             NSKeyDownMask, self._handle_key_down
         )
         self._monitors = [m1, m2]
-        logger.info("热键监听已启动（NSEvent），触发键: 双击 Option, ESC 取消")
+        logger.info("热键监听已启动，双击 Option 录音，ESC 取消")
 
     def stop(self):
         for m in self._monitors:
@@ -90,7 +80,3 @@ class HotkeyListener:
                 NSEvent.removeMonitor_(m)
         self._monitors = []
         logger.info("热键监听已停止")
-
-    @property
-    def is_pressed(self) -> bool:
-        return self._recording
