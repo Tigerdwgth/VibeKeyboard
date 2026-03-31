@@ -6,6 +6,7 @@
 
 import json
 import logging
+import os
 import signal
 import sys
 import threading
@@ -17,6 +18,7 @@ import rumps
 
 from asr.engine import ASREngine
 from asr.formatter import TextFormatter
+from asr.polisher import polish_with_llm
 from asr.hotwords import HotwordManager
 from audio.recorder import AudioRecorder
 from hotkey.listener import HotkeyListener
@@ -60,6 +62,8 @@ class VoiceInputApp(rumps.App):
         self._silence_start = 0.0
         self._has_voice = False
         self._stream_busy = False
+        self._last_stream_text = ""
+        self._last_stream_len = 0
         self._hide_timer: threading.Timer | None = None
 
         self.overlay = OverlayWindow(font_size=self.config.get("overlay_font_size", 16))
@@ -67,7 +71,10 @@ class VoiceInputApp(rumps.App):
         self.formatter = TextFormatter(self.config.get("formatting", {}))
         self.recorder = AudioRecorder()
         self.inserter = TextInserter()
-        self.engine = ASREngine(hotwords=self.hotword_manager.get_hotwords_string())
+        self.engine = ASREngine(
+            backend=self.config.get("asr_backend", "sensevoice"),
+            hotwords=self.hotword_manager.get_hotwords_string(),
+        )
 
         self.hotkey_listener = HotkeyListener(
             on_press=self._on_hotkey_press,
@@ -78,10 +85,15 @@ class VoiceInputApp(rumps.App):
         self.status_item.set_callback(None)
         self.hotwords_info = rumps.MenuItem(f"热词: {len(self.hotword_manager.hotwords)} 个")
         self.hotwords_info.set_callback(None)
+        self.backend_item = rumps.MenuItem("后端: SenseVoice")
+        self.backend_item.set_callback(None)
 
         self.menu = [
             self.status_item,
+            self.backend_item,
             None,
+            rumps.MenuItem("切换到 Paraformer（热词）", callback=self._switch_to_paraformer),
+            rumps.MenuItem("切换到 SenseVoice（快速）", callback=self._switch_to_sensevoice),
             self.hotwords_info,
             rumps.MenuItem("设置...", callback=self._open_settings),
             None,
@@ -116,10 +128,12 @@ class VoiceInputApp(rumps.App):
         self._audio_buf = bytearray()
         self._has_voice = False
         self._silence_start = 0.0
+        self._last_stream_text = ""
+        self._last_stream_len = 0
 
         self.recorder.start()
         self._update_status("recording")
-        self.overlay.show("🎤 正在录音...")
+        self.overlay.show("")
 
         threading.Thread(target=self._collect_audio, daemon=True).start()
         logger.info("开始录音")
@@ -139,7 +153,7 @@ class VoiceInputApp(rumps.App):
         silence_threshold = self.config.get("silence_threshold", 500)
         silence_duration = self.config.get("silence_timeout", 2.0)
         max_duration = self.config.get("max_duration", 30)
-        stream_interval = 0.5
+        stream_interval = 0.2
 
         start_time = time.time()
         last_stream_time = start_time
@@ -159,7 +173,6 @@ class VoiceInputApp(rumps.App):
                 if volume > silence_threshold:
                     self._has_voice = True
                     self._silence_start = 0.0
-                    self.overlay.update_text(f"🎤 录音中 {elapsed:.0f}s ...")
                 elif self._has_voice:
                     if self._silence_start == 0.0:
                         self._silence_start = time.time()
@@ -189,6 +202,8 @@ class VoiceInputApp(rumps.App):
         try:
             text = self.engine.transcribe(audio_data, blocking=False)
             if text and self._is_recording:
+                self._last_stream_text = text
+                self._last_stream_len = len(audio_data)
                 self.overlay.update_text(f"🎤 {text}")
         except Exception as e:
             logger.error(f"流式识别异常: {e}")
@@ -202,8 +217,6 @@ class VoiceInputApp(rumps.App):
             self._is_recording = False
 
         self.recorder.stop()
-        self._update_status("transcribing")
-        self.overlay.update_text("⏳ 识别中...")
 
         audio_data = bytes(self._audio_buf)
         if not audio_data:
@@ -211,7 +224,33 @@ class VoiceInputApp(rumps.App):
             self._update_status("idle")
             return
 
-        threading.Thread(target=self._do_transcribe, args=(audio_data,), daemon=True).start()
+        # 如果流式识别已覆盖 >=80% 的音频，直接用流式结果，跳过重复识别
+        if self._last_stream_text and self._last_stream_len >= len(audio_data) * 0.8:
+            logger.info(f"使用流式结果（覆盖 {self._last_stream_len}/{len(audio_data)}），跳过重复识别")
+            threading.Thread(
+                target=self._finish_with_text,
+                args=(self._last_stream_text,),
+                daemon=True,
+            ).start()
+        else:
+            self._update_status("transcribing")
+            self.overlay.update_text("⏳ 识别中...")
+            threading.Thread(target=self._do_transcribe, args=(audio_data,), daemon=True).start()
+
+    def _polish(self, text: str) -> str:
+        """润色文本：去水词"""
+        return polish_with_llm(text, self.config)
+
+    def _finish_with_text(self, text: str):
+        """直接用已有的识别结果完成（跳过重复识别）"""
+        formatted = self.formatter.format(text)
+        polished = self._polish(formatted)
+        logger.info(f"最终结果（流式）: {formatted} → {polished}")
+        self.inserter.insert_text(polished)
+        self.overlay.update_text(f"✅ {formatted}")
+        self._hide_timer = threading.Timer(3.0, self.overlay.hide)
+        self._hide_timer.start()
+        self._update_status("idle")
 
     def _do_transcribe(self, audio_data: bytes):
         try:
@@ -226,10 +265,11 @@ class VoiceInputApp(rumps.App):
                 return
 
             formatted = self.formatter.format(text)
-            logger.info(f"最终结果: {formatted}")
-            self.inserter.insert_text(formatted)
+            polished = self._polish(formatted)
+            logger.info(f"最终结果: {formatted} → {polished}")
+            self.inserter.insert_text(polished)
 
-            self.overlay.update_text(f"✅ {formatted}")
+            self.overlay.update_text(f"✅ {polished}")
             self._hide_timer = threading.Timer(3.0, self.overlay.hide)
             self._hide_timer.start()
             self._update_status("idle")
@@ -240,6 +280,36 @@ class VoiceInputApp(rumps.App):
             self._hide_timer = threading.Timer(1.5, self.overlay.hide)
             self._hide_timer.start()
             self._update_status("error")
+
+    def _switch_to_paraformer(self, _):
+        self._switch_backend("paraformer")
+
+    def _switch_to_sensevoice(self, _):
+        self._switch_backend("sensevoice")
+
+    def _switch_backend(self, backend):
+        if self._is_recording:
+            return
+        self._update_status("loading")
+        self.backend_item.title = f"后端: 切换中..."
+
+        def do_switch():
+            def on_progress(msg):
+                self.overlay.update_text(msg)
+                self.status_item.title = msg
+
+            self.engine.on_progress = on_progress
+            self.overlay.show("切换模型中...")
+            self.engine.switch_backend(backend)
+            self.overlay.hide()
+            self.engine.on_progress = None
+
+            name = self.engine.current_backend_name
+            self.backend_item.title = f"后端: {name}"
+            self._update_status("idle")
+            rumps.notification("VoiceInput", "", f"已切换到 {name}", sound=False)
+
+        threading.Thread(target=do_switch, daemon=True).start()
 
     def _open_settings(self, _):
         open_settings(
@@ -333,9 +403,21 @@ class VoiceInputApp(rumps.App):
         def load_model():
             self._request_mic_permission()
             self._update_status("loading")
+
+            # 进度回调 → 浮窗 + 状态栏
+            def on_progress(msg):
+                self.overlay.update_text(msg)
+                self.status_item.title = msg
+
+            self.engine.on_progress = on_progress
+            self.overlay.show("加载模型中...")
             self.engine.load_model()
+            self.overlay.hide()
+            self.engine.on_progress = None
+
+            self.backend_item.title = f"后端: {self.engine.current_backend_name}"
             self._update_status("idle")
-            rumps.notification("VoiceInput", "", "模型已就绪，双击 Option 开始语音输入", sound=True)
+            rumps.notification("VoiceInput", "", f"{self.engine.current_backend_name} 已就绪，双击 Option 开始语音输入", sound=True)
 
         threading.Thread(target=load_model, daemon=True).start()
 

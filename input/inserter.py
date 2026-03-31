@@ -1,4 +1,4 @@
-"""文本插入模块 — osascript set clipboard + 模拟粘贴"""
+"""文本插入模块 — NSPasteboard + 多种粘贴方式"""
 
 import logging
 import subprocess
@@ -13,11 +13,34 @@ try:
 except ImportError:
     HAS_APPKIT = False
 
+try:
+    from Quartz import (
+        CGEventCreateKeyboardEvent,
+        CGEventPost,
+        CGEventSetFlags,
+        kCGEventFlagMaskCommand,
+        kCGHIDEventTap,
+    )
+    HAS_QUARTZ = True
+except ImportError:
+    HAS_QUARTZ = False
+
+V_KEY = 0x09
+
+
+def _check_accessibility() -> bool:
+    """检查是否有辅助功能权限"""
+    try:
+        from ApplicationServices import AXIsProcessTrusted
+        return AXIsProcessTrusted()
+    except ImportError:
+        return False
+
 
 class TextInserter:
-    def __init__(self, restore_delay: float = 1.5):
-        self.restore_delay = restore_delay
+    def __init__(self):
         self._lock = threading.Lock()
+        self._accessibility_warned = False
 
     def insert_text(self, text: str):
         """写入剪贴板并尝试自动粘贴"""
@@ -25,54 +48,91 @@ class TextInserter:
             return
 
         with self._lock:
-            # 用 osascript 一次性完成：设置剪贴板 + 粘贴
-            success = self._set_and_paste(text)
-            if not success:
-                # 回退：至少写入剪贴板
-                self._set_clipboard(text)
-                logger.info("已复制到剪贴板（自动粘贴失败，请手动 Cmd+V）")
+            if not self._set_clipboard(text):
+                logger.error("剪贴板写入失败")
                 return
 
-        logger.info(f"已插入文本: {text[:50]}...")
+            time.sleep(0.05)
 
-    def _set_and_paste(self, text: str) -> bool:
-        """用单个 osascript 同时设置剪贴板并粘贴"""
-        # 转义文本中的特殊字符
-        escaped = text.replace("\\", "\\\\").replace('"', '\\"')
-        script = f'''
-            set the clipboard to "{escaped}"
-            delay 0.1
-            tell application "System Events"
-                key code 9 using command down
-            end tell
-        '''
-        try:
-            result = subprocess.run(
-                ["osascript", "-e", script],
-                timeout=10,
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode != 0:
-                logger.warning(f"osascript 返回码 {result.returncode}: {result.stderr.strip()}")
-                return False
-            return True
-        except Exception as e:
-            logger.error(f"osascript 执行失败: {e}")
-            return False
+            # 尝试粘贴：CGEvent → osascript → 仅剪贴板
+            if self._paste_cgevent():
+                logger.info(f"已粘贴: {text[:50]}...")
+            elif self._paste_osascript():
+                logger.info(f"已粘贴(osascript): {text[:50]}...")
+            else:
+                if not self._accessibility_warned:
+                    self._accessibility_warned = True
+                    self._prompt_accessibility()
+                logger.info(f"已复制到剪贴板，请 Cmd+V: {text[:50]}...")
 
-    def _set_clipboard(self, text: str):
-        """回退：仅写入剪贴板"""
+    def _set_clipboard(self, text: str) -> bool:
         if HAS_APPKIT:
             try:
                 pb = AppKit.NSPasteboard.generalPasteboard()
                 pb.clearContents()
                 pb.setString_forType_(text, AppKit.NSPasteboardTypeString)
-                return
-            except Exception:
-                pass
+                return True
+            except Exception as e:
+                logger.warning(f"NSPasteboard 失败: {e}")
         try:
             p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
             p.communicate(text.encode("utf-8"), timeout=2)
+            return p.returncode == 0
         except Exception as e:
-            logger.error(f"剪贴板写入失败: {e}")
+            logger.error(f"pbcopy 失败: {e}")
+            return False
+
+    def _paste_cgevent(self) -> bool:
+        """用 CGEvent 模拟 Cmd+V（需要辅助功能权限）"""
+        if not HAS_QUARTZ:
+            return False
+        try:
+            event_down = CGEventCreateKeyboardEvent(None, V_KEY, True)
+            if event_down is None:
+                return False
+            CGEventSetFlags(event_down, kCGEventFlagMaskCommand)
+            CGEventPost(kCGHIDEventTap, event_down)
+
+            time.sleep(0.02)
+
+            event_up = CGEventCreateKeyboardEvent(None, V_KEY, False)
+            CGEventSetFlags(event_up, kCGEventFlagMaskCommand)
+            CGEventPost(kCGHIDEventTap, event_up)
+            return True
+        except Exception as e:
+            logger.debug(f"CGEvent 粘贴失败: {e}")
+            return False
+
+    def _paste_osascript(self) -> bool:
+        """用 osascript 模拟 Cmd+V"""
+        try:
+            r = subprocess.run(
+                ["osascript", "-e",
+                 'tell application "System Events" to key code 9 using command down'],
+                timeout=5, capture_output=True, text=True,
+            )
+            if r.returncode == 0:
+                return True
+            logger.debug(f"osascript 失败: {r.stderr.strip()}")
+            return False
+        except Exception:
+            return False
+
+    def _prompt_accessibility(self):
+        """引导用户开启辅助功能权限"""
+        try:
+            # 打开系统设置的辅助功能页面
+            subprocess.Popen([
+                "open",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            ])
+            if HAS_APPKIT:
+                # 弹通知
+                from rumps import notification
+                notification(
+                    "VoiceInput", "需要辅助功能权限",
+                    "请在系统设置中允许 VoiceInput 控制电脑，以启用自动粘贴",
+                    sound=True,
+                )
+        except Exception as e:
+            logger.error(f"打开辅助功能设置失败: {e}")
