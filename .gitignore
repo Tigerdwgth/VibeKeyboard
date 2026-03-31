@@ -7,5 +7,4 @@ dist/
 build/
 .DS_Store
 voice-input.log
-resources/*.png
 resources/*.icns
