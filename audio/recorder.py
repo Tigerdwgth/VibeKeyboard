@@ -3,7 +3,6 @@
 import logging
 import queue
 
-import numpy as np
 import sounddevice as sd
 
 logger = logging.getLogger(__name__)

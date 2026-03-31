@@ -1,21 +1,27 @@
 """LLM 文本润色 — 去除语气词、水词，保留原意"""
 
 import logging
-import os
 import re
 
 logger = logging.getLogger(__name__)
 
-# 本地规则：快速去除常见语气词（不依赖网络）
-FILLER_PATTERNS = [
-    r'^[呃嗯啊哎唉额哦嗷那个就是然后]+[，,、\s]*',  # 开头语气词
-    r'[，,]\s*[呃嗯啊额哦]+\s*[，,]',  # 中间语气词
+# 预编译本地规则
+_FILLER_RES = [re.compile(p) for p in [
+    r'^[呃嗯啊哎唉额哦嗷那个就是然后]+[，,、\s]*',
+    r'[，,]\s*[呃嗯啊额哦]+\s*[，,]',
     r'[，,]\s*就是说?\s*[，,]',
     r'[，,]\s*然后\s*[，,]',
     r'[，,]\s*那个\s*[，,]',
     r'[，,]\s*对吧\s*[。？]?$',
     r'[，,]\s*是吧\s*[。？]?$',
-]
+]]
+_RE_MULTI_COMMA = re.compile(r'[，,]{2,}')
+_RE_LEADING_COMMA = re.compile(r'^[，,\s]+')
+_RE_TRAILING_COMMA = re.compile(r'[，,\s]+$')
+
+# 缓存 OpenAI client
+_llm_client = None
+_llm_client_key = None
 
 
 def polish_local(text: str) -> str:
@@ -23,12 +29,12 @@ def polish_local(text: str) -> str:
     if not text:
         return text
     result = text
-    for pattern in FILLER_PATTERNS:
-        result = re.sub(pattern, '，', result)
+    for pat in _FILLER_RES:
+        result = pat.sub('，', result)
     # 清理多余逗号
-    result = re.sub(r'[，,]{2,}', '，', result)
-    result = re.sub(r'^[，,\s]+', '', result)
-    result = re.sub(r'[，,\s]+$', '', result)
+    result = _RE_MULTI_COMMA.sub('，', result)
+    result = _RE_LEADING_COMMA.sub('', result)
+    result = _RE_TRAILING_COMMA.sub('', result)
     # 确保句尾有标点
     if result and result[-1] not in '。？！.?!':
         result += '。'
@@ -68,7 +74,12 @@ def polish_with_llm(text: str, config: dict | None = None) -> str:
 
     try:
         from openai import OpenAI
-        client = OpenAI(base_url=api_url, api_key=api_key)
+        global _llm_client, _llm_client_key
+        cache_key = (api_url, api_key)
+        if _llm_client is None or _llm_client_key != cache_key:
+            _llm_client = OpenAI(base_url=api_url, api_key=api_key)
+            _llm_client_key = cache_key
+        client = _llm_client
 
         params = {
             "messages": [{"role": "user", "content": prompt}],

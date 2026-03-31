@@ -28,15 +28,6 @@ except ImportError:
 V_KEY = 0x09
 
 
-def _check_accessibility() -> bool:
-    """检查是否有辅助功能权限"""
-    try:
-        from ApplicationServices import AXIsProcessTrusted
-        return AXIsProcessTrusted()
-    except ImportError:
-        return False
-
-
 class TextInserter:
     def __init__(self):
         self._lock = threading.Lock()

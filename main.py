@@ -6,7 +6,6 @@
 
 import json
 import logging
-import os
 import signal
 import sys
 import threading
@@ -241,16 +240,25 @@ class VoiceInputApp(rumps.App):
         """润色文本：去水词"""
         return polish_with_llm(text, self.config)
 
-    def _finish_with_text(self, text: str):
-        """直接用已有的识别结果完成（跳过重复识别）"""
+    def _schedule_hide(self, delay: float):
+        """取消旧 timer 再创建新的"""
+        self._cancel_hide_timer()
+        self._hide_timer = threading.Timer(delay, self.overlay.hide)
+        self._hide_timer.start()
+
+    def _deliver_result(self, text: str):
+        """公共结果输出流程：格式化 → 润色 → 插入 → 展示"""
         formatted = self.formatter.format(text)
         polished = self._polish(formatted)
-        logger.info(f"最终结果（流式）: {formatted} → {polished}")
+        logger.info(f"最终结果: {formatted} → {polished}")
         self.inserter.insert_text(polished)
-        self.overlay.update_text(f"✅ {formatted}")
-        self._hide_timer = threading.Timer(3.0, self.overlay.hide)
-        self._hide_timer.start()
+        self.overlay.update_text(f"✅ {polished}")
+        self._schedule_hide(3.0)
         self._update_status("idle")
+
+    def _finish_with_text(self, text: str):
+        """直接用已有的识别结果完成（跳过重复识别）"""
+        self._deliver_result(text)
 
     def _do_transcribe(self, audio_data: bytes):
         try:
@@ -259,26 +267,16 @@ class VoiceInputApp(rumps.App):
             if not text.strip():
                 logger.info("识别结果为空")
                 self.overlay.update_text("（未识别到语音）")
-                self._hide_timer = threading.Timer(1.5, self.overlay.hide)
-                self._hide_timer.start()
+                self._schedule_hide(1.5)
                 self._update_status("idle")
                 return
 
-            formatted = self.formatter.format(text)
-            polished = self._polish(formatted)
-            logger.info(f"最终结果: {formatted} → {polished}")
-            self.inserter.insert_text(polished)
-
-            self.overlay.update_text(f"✅ {polished}")
-            self._hide_timer = threading.Timer(3.0, self.overlay.hide)
-            self._hide_timer.start()
-            self._update_status("idle")
+            self._deliver_result(text)
 
         except Exception as e:
             logger.error(f"转写异常: {e}", exc_info=True)
             self.overlay.update_text("❌ 识别出错")
-            self._hide_timer = threading.Timer(1.5, self.overlay.hide)
-            self._hide_timer.start()
+            self._schedule_hide(1.5)
             self._update_status("error")
 
     def _switch_to_paraformer(self, _):

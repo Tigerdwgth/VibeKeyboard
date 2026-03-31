@@ -35,6 +35,7 @@ class OverlayWindow:
         self._text_field = None
         self._indicator = None
         self._bg = None
+        self._last_mask_size = (0, 0)
 
         if HAS_APPKIT:
             self._setup()
@@ -66,7 +67,7 @@ class OverlayWindow:
         bg.setMaterial_(AppKit.NSVisualEffectMaterialHUDWindow)
         bg.setBlendingMode_(AppKit.NSVisualEffectBlendingModeBehindWindow)
         bg.setState_(AppKit.NSVisualEffectStateActive)
-        bg.setMaskImage_(self._rounded_mask(W, H, _CORNER_RADIUS))
+        bg.setMaskImage_(self._get_mask(W, H, _CORNER_RADIUS))
         self._window.setContentView_(bg)
         self._bg = bg
 
@@ -102,18 +103,21 @@ class OverlayWindow:
         self._text_field.cell().setLineBreakMode_(AppKit.NSLineBreakByWordWrapping)
         bg.addSubview_(self._text_field)
 
-    @staticmethod
-    def _rounded_mask(w, h, radius):
-        """生成圆角矩形 maskImage，用于 NSVisualEffectView 无白边圆角"""
-        image = AppKit.NSImage.alloc().initWithSize_(Foundation.NSMakeSize(w, h))
-        image.lockFocus()
-        path = AppKit.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
-            Foundation.NSMakeRect(0, 0, w, h), radius, radius
-        )
-        AppKit.NSColor.blackColor().setFill()
-        path.fill()
-        image.unlockFocus()
-        return image
+    def _get_mask(self, w, h):
+        """获取圆角 mask，尺寸不变时复用缓存"""
+        w, h = int(w), int(h)
+        if (w, h) != self._last_mask_size:
+            image = AppKit.NSImage.alloc().initWithSize_(Foundation.NSMakeSize(w, h))
+            image.lockFocus()
+            path = AppKit.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
+                Foundation.NSMakeRect(0, 0, w, h), _CORNER_RADIUS, _CORNER_RADIUS
+            )
+            AppKit.NSColor.blackColor().setFill()
+            path.fill()
+            image.unlockFocus()
+            self._cached_mask = image
+            self._last_mask_size = (w, h)
+        return self._cached_mask
 
     def _relayout(self):
         """根据当前文字内容重新计算窗口和子视图尺寸，文字垂直居中"""
@@ -148,7 +152,7 @@ class OverlayWindow:
 
         # 同步背景 + mask
         self._bg.setFrame_(Foundation.NSMakeRect(0, 0, new_w, new_h))
-        self._bg.setMaskImage_(self._rounded_mask(new_w, new_h, _CORNER_RADIUS))
+        self._bg.setMaskImage_(self._get_mask(new_w, new_h, _CORNER_RADIUS))
 
         # 文字垂直居中
         text_field_h = min(text_h + 4, new_h - 4)
@@ -177,7 +181,7 @@ class OverlayWindow:
             frame.size.height = _H_MIN
             self._window.setFrame_display_(frame, True)
             self._bg.setFrame_(Foundation.NSMakeRect(0, 0, init_w, _H_MIN))
-            self._bg.setMaskImage_(self._rounded_mask(init_w, _H_MIN, _CORNER_RADIUS))
+            self._bg.setMaskImage_(self._get_mask(init_w, _H_MIN, _CORNER_RADIUS))
             self._text_field.setFrame_(Foundation.NSMakeRect(32, 0, 1, _H_MIN))
             indicator_y = (_H_MIN - 10) / 2.0
             self._indicator.setFrameOrigin_(Foundation.NSMakePoint(14, indicator_y))

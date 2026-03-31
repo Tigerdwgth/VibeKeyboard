@@ -1,13 +1,15 @@
 """ASR 引擎 — 支持 SeACo-Paraformer 和 SenseVoice 双后端"""
 
 import logging
-import os
+import re
 import threading
 import time
 from pathlib import Path
 from typing import Callable
 
 import numpy as np
+
+_SENSEVOICE_TAG_RE = re.compile(r"<\|[^|]*\|>")
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +53,8 @@ class ASREngine:
     def _get_cache_dir_size(self, model_id: str) -> float:
         """获取模型缓存目录大小（MB）"""
         cache_base = Path.home() / ".cache" / "modelscope" / "hub" / "models"
-        model_dir = cache_base / model_id.replace("/", "/")
-        temp_dir = cache_base / "._____temp" / model_id.replace("/", "/")
+        model_dir = cache_base / model_id
+        temp_dir = cache_base / "._____temp" / model_id
         total = 0
         for d in [model_dir, temp_dir]:
             if d.exists():
@@ -64,7 +66,7 @@ class ASREngine:
     def _needs_download(self, model_id: str) -> bool:
         """检查模型是否需要下载"""
         cache_base = Path.home() / ".cache" / "modelscope" / "hub" / "models"
-        model_dir = cache_base / model_id.replace("/", "/")
+        model_dir = cache_base / model_id
         if not model_dir.exists():
             return True
         # 检查是否有 model.pt 或 model.safetensors
@@ -206,8 +208,7 @@ class ASREngine:
             text = result[0]["text"]
             # SenseVoice 输出可能带 <|xx|> 标签，清理掉
             if self._current_backend == "sensevoice":
-                import re
-                text = re.sub(r"<\|[^|]*\|>", "", text).strip()
+                text = _SENSEVOICE_TAG_RE.sub("", text).strip()
 
         logger.info(f"[{self.current_backend_name}] {elapsed:.2f}s → {text[:60]}")
         return text
