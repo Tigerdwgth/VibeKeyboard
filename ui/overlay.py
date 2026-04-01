@@ -29,7 +29,7 @@ _CORNER_RADIUS = 10
 
 
 class OverlayWindow:
-    def __init__(self, font_size: int = 15):
+    def __init__(self, font_size: int = 13):
         self.font_size = font_size
         self._window = None
         self._text_field = None

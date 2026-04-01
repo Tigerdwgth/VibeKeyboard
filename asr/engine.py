@@ -46,25 +46,43 @@ class ASREngine:
         self.on_progress: Callable[[str], None] | None = None
 
     def _ensure_sherpa_model(self):
-        """确保 sherpa-onnx SenseVoice 模型已下载"""
+        """确保 sherpa-onnx SenseVoice 模型已下载，带进度显示"""
         model_file = _SHERPA_MODEL_DIR / "model.int8.onnx"
         if model_file.exists():
             return True
 
-        logger.info("下载 sherpa-onnx SenseVoice 模型...")
-        if self.on_progress:
-            self.on_progress("下载 SenseVoice-ONNX 模型 (~230MB)...")
-
         import subprocess
+        import urllib.request
+
         cache_dir = _SHERPA_MODEL_DIR.parent
         cache_dir.mkdir(parents=True, exist_ok=True)
-
         archive = cache_dir / "sensevoice.tar.bz2"
+
+        logger.info("下载 sherpa-onnx SenseVoice 模型...")
+
         try:
-            subprocess.run(
-                ["curl", "-SL", "-o", str(archive), _SHERPA_MODEL_URL],
-                check=True, timeout=600,
-            )
+            # 用 urllib 下载，带进度回调
+            req = urllib.request.Request(_SHERPA_MODEL_URL)
+            with urllib.request.urlopen(req, timeout=600) as resp:
+                total = int(resp.headers.get("Content-Length", 0))
+                total_mb = total / (1024 * 1024) if total else 230
+
+                downloaded = 0
+                chunk_size = 256 * 1024  # 256KB
+                with open(archive, "wb") as f:
+                    while True:
+                        chunk = resp.read(chunk_size)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        mb = downloaded / (1024 * 1024)
+                        pct = int(downloaded / total * 100) if total else 0
+                        if self.on_progress:
+                            self.on_progress(f"下载模型... {pct}% ({mb:.0f}/{total_mb:.0f}MB)")
+
+            if self.on_progress:
+                self.on_progress("解压模型...")
             subprocess.run(
                 ["tar", "xjf", str(archive), "-C", str(cache_dir)],
                 check=True, timeout=120,
@@ -74,6 +92,7 @@ class ASREngine:
             return True
         except Exception as e:
             logger.error(f"sherpa-onnx 模型下载失败: {e}")
+            archive.unlink(missing_ok=True)
             return False
 
     def _load_sherpa(self):
