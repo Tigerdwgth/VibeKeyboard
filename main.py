@@ -17,7 +17,7 @@ import rumps
 
 from asr.engine import ASREngine
 from asr.formatter import TextFormatter
-from asr.polisher import polish_with_llm
+from asr.polisher import polish_local
 from asr.hotwords import HotwordManager
 from audio.recorder import AudioRecorder
 from hotkey.listener import HotkeyListener
@@ -237,8 +237,8 @@ class VoiceInputApp(rumps.App):
             threading.Thread(target=self._do_transcribe, args=(audio_data,), daemon=True).start()
 
     def _polish(self, text: str) -> str:
-        """润色文本：去水词"""
-        return polish_with_llm(text, self.config)
+        """去水词（本地规则，不走 LLM）"""
+        return polish_local(text)
 
     def _schedule_hide(self, delay: float):
         """取消旧 timer 再创建新的"""

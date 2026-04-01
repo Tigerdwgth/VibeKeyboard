@@ -36,6 +36,7 @@ class OverlayWindow:
         self._indicator = None
         self._bg = None
         self._last_mask_size = (0, 0)
+        self._cached_mask = None
 
         if HAS_APPKIT:
             self._setup()

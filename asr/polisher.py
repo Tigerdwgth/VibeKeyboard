@@ -7,13 +7,8 @@ logger = logging.getLogger(__name__)
 
 # 预编译本地规则
 _FILLER_RES = [re.compile(p) for p in [
-    r'^[呃嗯啊哎唉额哦嗷那个就是然后]+[，,、\s]*',
-    r'[，,]\s*[呃嗯啊额哦]+\s*[，,]',
-    r'[，,]\s*就是说?\s*[，,]',
-    r'[，,]\s*然后\s*[，,]',
-    r'[，,]\s*那个\s*[，,]',
-    r'[，,]\s*对吧\s*[。？]?$',
-    r'[，,]\s*是吧\s*[。？]?$',
+    r'^[呃嗯啊额哦唉哎嗷]+[，,、\s]*',  # 开头语气词
+    r'[，,]\s*[呃嗯啊额哦]+\s*[，,]',    # 中间语气词
 ]]
 _RE_MULTI_COMMA = re.compile(r'[，,]{2,}')
 _RE_LEADING_COMMA = re.compile(r'^[，,\s]+')
