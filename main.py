@@ -150,7 +150,7 @@ class VoiceInputApp(rumps.App):
 
     def _collect_audio(self):
         silence_threshold = self.config.get("silence_threshold", 500)
-        silence_duration = self.config.get("silence_timeout", 2.0)
+        silence_duration = self.config.get("silence_timeout", 1.2)
         max_duration = self.config.get("max_duration", 30)
         stream_interval = 0.2
 
@@ -223,9 +223,9 @@ class VoiceInputApp(rumps.App):
             self._update_status("idle")
             return
 
-        # 如果流式识别已覆盖 >=80% 的音频，直接用流式结果，跳过重复识别
-        if self._last_stream_text and self._last_stream_len >= len(audio_data) * 0.8:
-            logger.info(f"使用流式结果（覆盖 {self._last_stream_len}/{len(audio_data)}），跳过重复识别")
+        # 有流式结果就直接用，不重新识别
+        if self._last_stream_text:
+            logger.info(f"使用流式结果，跳过重复识别")
             threading.Thread(
                 target=self._finish_with_text,
                 args=(self._last_stream_text,),
