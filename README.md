@@ -1,128 +1,189 @@
 # VoiceInk 🎤
 
-A macOS voice input tool powered by [FunASR](https://github.com/modelscope/FunASR). Double-tap Option to speak, and your words are transcribed and pasted instantly.
+macOS 本地语音输入工具。双击 Option 开始说话，实时显示识别结果，回车确认自动粘贴。完全离线，无需云端 API。
+
+A local voice input tool for macOS. Double-tap Option to speak, see real-time transcription, press Enter to paste. Fully offline, no cloud API needed.
 
 ## Features
 
-- **Chinese-English mixed input** — Seamlessly switch between Chinese and English
-- **Hotword customization** — Boost recognition accuracy for domain-specific terms
-- **Auto-formatting** — Punctuation, CJK-English spacing, capitalization
-- **Real-time preview** — See partial transcription results as you speak
-- **VAD auto-stop** — Automatically stops when you pause speaking
-- **ESC to cancel** — Press ESC to abort recording anytime
-- **Native macOS app** — Menubar integration, system notifications
+- **Real-time streaming recognition** — See transcription update live as you speak (0.2s refresh)
+- **Chinese-English mixed input** — Seamlessly switch between Mandarin and English
+- **Three ASR backends** — SenseVoice-ONNX (fastest, default), SenseVoice-FunASR, Paraformer (hotword support)
+- **Hotword customization** — Boost accuracy for domain-specific terms (Paraformer backend)
+- **Auto-formatting** — Punctuation, CJK-English spacing, filler word removal
+- **Continuous recording** — No auto-stop; record as long as you want
+- **Instant paste** — Enter or double-tap Option to confirm, text is pasted immediately
+- **ESC to cancel** — Abort recording anytime without pasting
+- **Native macOS app** — Menubar icon, Dock icon, frosted glass overlay, system notifications
+- **Settings UI** — WKWebView-based modern settings window (Cmd+,)
+- **Privacy first** — Everything runs locally on your Mac, no data leaves your device
 
-## Architecture
+## How It Works
 
 ```
-Double-tap Option → Record audio → FunASR (local, offline) → Format → Paste
+Double-tap Option → Record & stream recognize → Enter to confirm → Auto-paste
+                                               → ESC to cancel
 ```
 
-All processing happens locally on your Mac. No cloud, no API keys, fully offline.
+## Screenshots
+
+| Recording | Settings |
+|-----------|----------|
+| Frosted glass overlay with real-time transcription | Dark theme settings with hotword management |
 
 ## Requirements
 
 - macOS 13+
 - Apple Silicon (M1/M2/M3/M4) or Intel Mac
-- ~2GB disk space for models
-- Python 3.10+ (via Miniconda/Miniforge)
+- ~1GB disk space (SenseVoice-ONNX model)
+- Python 3.10+
 
-## Installation
+## Quick Start
 
-### 1. Setup Python environment
+### 1. Setup environment
 
 ```bash
-# Install Miniconda (if not already installed)
-# ARM Mac:
+# Install Miniconda (ARM Mac)
 curl -sL -o miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh
-# Intel Mac:
-# curl -sL -o miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh
 bash miniconda.sh -b -p ~/miniconda3
 
 # Create environment
 source ~/miniconda3/bin/activate
 conda create -n voice-input python=3.10 -y
 conda activate voice-input
-
-# Install numba via conda (avoids llvmlite build issues)
 conda install -c conda-forge numba llvmlite -y
 ```
 
 ### 2. Install dependencies
 
 ```bash
-cd voice-input-mac
+git clone https://github.com/Tigerdwgth/VoiceInk.git
+cd VoiceInk
+
 pip install torch torchaudio
-pip install "numpy<2" funasr sounddevice rumps \
+pip install "numpy<2" funasr sounddevice rumps sherpa-onnx \
     pyobjc-framework-Cocoa pyobjc-framework-Quartz \
-    pyobjc-framework-WebKit websockets Pillow
+    pyobjc-framework-WebKit Pillow huggingface_hub
 ```
 
-### 3. Download models (first run)
+### 3. Build & Launch
 
 ```bash
-python -c "
-from funasr import AutoModel
-AutoModel(
-    model='iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch',
-    vad_model='iic/speech_fsmn_vad_zh-cn-16k-common-pytorch',
-    punc_model='iic/punc_ct-transformer_cn-en-common-vocab471067-large',
-    device='cpu', disable_update=True,
-)
-print('Models downloaded successfully')
-"
-```
-
-### 4. Build macOS app
-
-```bash
+# Build .app bundle
 bash build_app.sh
-```
 
-### 5. Launch
-
-Double-click `~/Applications/VoiceInput.app`, or:
-
-```bash
+# Launch
 open ~/Applications/VoiceInput.app
 ```
 
-Grant microphone and accessibility permissions when prompted.
+First launch will download the SenseVoice-ONNX model (~230MB). Grant **microphone** and **accessibility** permissions when prompted.
+
+### Alternative: Run from terminal
+
+```bash
+source ~/miniconda3/bin/activate voice-input
+cd VoiceInk
+python main.py
+```
 
 ## Usage
 
 | Action | Shortcut |
 |--------|----------|
-| Start/stop recording | Double-tap **Option** |
+| Start recording | Double-tap **Option** |
+| Confirm & paste | **Enter** or double-tap **Option** again |
 | Cancel recording | **ESC** |
-| Open settings | **Cmd+,** or menubar → Settings |
+| Open settings | **Cmd+,** or menubar → VoiceInput → Settings |
+
+### Workflow
+
+1. **Double-tap Option** — Recording starts, overlay appears near cursor
+2. **Speak** — Real-time transcription updates in the overlay every 0.2s
+3. **Enter** — Stops recording, pastes text at cursor, closes overlay instantly
+4. Or **ESC** — Cancels without pasting
+
+## ASR Backends
+
+Switch backends from the menubar menu at any time.
+
+| Backend | Speed | Chinese | Hotwords | Notes |
+|---------|-------|---------|----------|-------|
+| **SenseVoice-ONNX** (default) | ~70ms/10s | Excellent | No | sherpa-onnx, fastest |
+| SenseVoice-FunASR | ~500ms/10s | Excellent | No | FunASR Python API |
+| Paraformer | ~500ms/10s | Good | **Yes** | SeACo-Paraformer, use when you need hotwords |
 
 ## Configuration
 
-Edit `config/settings.json` or use the built-in settings UI:
+Open settings via **Cmd+,** or edit `config/settings.json`:
 
-- **Silence timeout** — How long to wait after you stop speaking (default: 2s)
-- **Max duration** — Maximum recording length (default: 30s)
-- **Silence threshold** — Volume threshold for silence detection (default: 500)
-- **Hotwords** — Add domain-specific terms for better recognition
+```json
+{
+    "asr_backend": "sherpa-sensevoice",
+    "silence_threshold": 500,
+    "overlay_font_size": 13,
+    "formatting": {
+        "auto_spacing": true,
+        "capitalize": true,
+        "replacements": {}
+    }
+}
+```
 
-## Hotwords
+### Hotwords
 
-Add hotwords in `config/hotwords.txt` (one per line) to improve recognition of specific terms:
+Add domain-specific terms in `config/hotwords.txt` (one per line) to improve recognition accuracy when using the Paraformer backend:
 
 ```
 Transformer
 Claude
 FunASR
+RLHF
+```
+
+## Project Structure
+
+```
+VoiceInk/
+├── main.py              # Entry point, menubar app, recording orchestration
+├── asr/
+│   ├── engine.py        # Three-backend ASR engine (sherpa-onnx / FunASR)
+│   ├── formatter.py     # CJK-English spacing, capitalization
+│   ├── hotwords.py      # Hotword file management
+│   └── polisher.py      # Filler word removal (local regex)
+├── audio/
+│   └── recorder.py      # Microphone capture (sounddevice, 16kHz PCM)
+├── hotkey/
+│   └── listener.py      # NSEvent global+local monitor (Option/Enter/ESC)
+├── input/
+│   └── inserter.py      # NSPasteboard + AppleScript paste
+├── ui/
+│   ├── overlay.py       # Frosted glass floating window (NSVisualEffectView)
+│   └── settings.py      # WKWebView settings UI
+├── config/
+│   ├── settings.json    # User configuration
+│   └── hotwords.txt     # Custom hotword list
+├── build_app.sh         # Build .app bundle with python3 hardlink
+├── CLAUDE.md            # Known bugs and development notes
+└── resources/
+    └── appicon.png      # App icon
 ```
 
 ## Tech Stack
 
-- **ASR Engine**: [FunASR](https://github.com/modelscope/FunASR) (SeACo-Paraformer)
+- **ASR**: [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (SenseVoice-ONNX) / [FunASR](https://github.com/modelscope/FunASR) (SenseVoice, Paraformer)
 - **Audio**: sounddevice (PortAudio)
 - **Menubar**: rumps
-- **UI**: PyObjC (NSWindow, WKWebView)
-- **Hotkey**: NSEvent global monitor
+- **UI**: PyObjC (NSWindow, NSVisualEffectView, WKWebView)
+- **Hotkey**: NSEvent addGlobalMonitor + addLocalMonitor
+- **Paste**: NSPasteboard + AppleScript keystroke simulation
+
+## Known Issues
+
+See [CLAUDE.md](CLAUDE.md) for detailed bug history and workarounds.
+
+- Microphone permission requires python3 hardlink inside .app bundle (see `build_app.sh`)
+- Auto-paste requires accessibility permission for AppleScript
+- First inference with SenseVoice-FunASR is slow (~7s JIT warmup)
 
 ## License
 
