@@ -72,18 +72,36 @@ class HotkeyListener:
                 except Exception as e:
                     logger.error(f"on_confirm 异常: {e}")
 
+    def _handle_flags_local(self, event):
+        """Local monitor wrapper（需要返回 event）"""
+        self._handle_flags_changed(event)
+        return event
+
+    def _handle_key_local(self, event):
+        """Local monitor wrapper（需要返回 event）"""
+        self._handle_key_down(event)
+        return event
+
     def start(self):
         if not HAS_APPKIT:
             logger.error("无法启动热键监听：缺少 AppKit")
             return
+        # Global monitor: 监听其他应用的按键
         m1 = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
             NSFlagsChangedMask, self._handle_flags_changed
         )
         m2 = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
             NSKeyDownMask, self._handle_key_down
         )
-        self._monitors = [m1, m2]
-        logger.info("热键监听已启动，双击 Option 录音，ESC 取消")
+        # Local monitor: 监听自己应用内的按键（global monitor 收不到自己的）
+        m3 = NSEvent.addLocalMonitorForEventsMatchingMask_handler_(
+            NSFlagsChangedMask, self._handle_flags_local
+        )
+        m4 = NSEvent.addLocalMonitorForEventsMatchingMask_handler_(
+            NSKeyDownMask, self._handle_key_local
+        )
+        self._monitors = [m1, m2, m3, m4]
+        logger.info("热键监听已启动，双击 Option 录音，回车确认，ESC 取消")
 
     def stop(self):
         for m in self._monitors:
