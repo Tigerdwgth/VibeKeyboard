@@ -121,10 +121,14 @@ class OverlayWindow:
         return self._cached_mask
 
     def _relayout(self):
-        """根据当前文字内容重新计算窗口和子视图尺寸，文字垂直居中"""
+        """根据当前文字内容重新计算窗口和子视图尺寸，文字居中"""
         display = self._text_field.stringValue()
         if not display:
             return
+
+        indicator_visible = not self._indicator.isHidden()
+        left_pad = 32 if indicator_visible else 12
+        right_pad = 12
 
         # 用 attributedString 计算单行自然宽度
         attr_str = self._text_field.attributedStringValue()
@@ -133,8 +137,8 @@ class OverlayWindow:
             AppKit.NSStringDrawingUsesLineFragmentOrigin | AppKit.NSStringDrawingUsesFontLeading,
         )
         natural_w = single_line.size.width
-        new_w = max(160, min(_W_MAX, natural_w + 52))
-        available_w = new_w - 44
+        new_w = max(160, min(_W_MAX, natural_w + left_pad + right_pad))
+        available_w = new_w - left_pad - right_pad
 
         # 在限定宽度下计算多行高度
         bounding = attr_str.boundingRectWithSize_options_(
@@ -158,11 +162,18 @@ class OverlayWindow:
         # 文字垂直居中
         text_field_h = min(text_h + 4, new_h - 4)
         text_y = (new_h - text_field_h) / 2.0
-        self._text_field.setFrame_(Foundation.NSMakeRect(32, text_y, available_w, text_field_h))
+        self._text_field.setFrame_(Foundation.NSMakeRect(left_pad, text_y, available_w, text_field_h))
+
+        # 无指示灯时文字水平居中
+        if not indicator_visible:
+            self._text_field.setAlignment_(AppKit.NSTextAlignmentCenter)
+        else:
+            self._text_field.setAlignment_(AppKit.NSTextAlignmentLeft)
 
         # 指示灯垂直居中
-        indicator_y = (new_h - 10) / 2.0
-        self._indicator.setFrameOrigin_(Foundation.NSMakePoint(14, indicator_y))
+        if indicator_visible:
+            indicator_y = (new_h - 10) / 2.0
+            self._indicator.setFrameOrigin_(Foundation.NSMakePoint(14, indicator_y))
 
     def show(self, text: str = "", show_indicator: bool = True):
         if not HAS_APPKIT or not self._window:
