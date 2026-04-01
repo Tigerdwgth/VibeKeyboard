@@ -15,6 +15,7 @@ except ImportError:
 
 FLAG_OPTION = 1 << 19
 KEY_ESCAPE = 53
+KEY_RETURN = 36
 DOUBLE_TAP_INTERVAL = 0.35
 
 
@@ -25,9 +26,11 @@ class HotkeyListener:
         self,
         on_press: Callable[[], None] | None = None,
         on_cancel: Callable[[], None] | None = None,
+        on_confirm: Callable[[], None] | None = None,
     ):
         self.on_press = on_press
         self.on_cancel = on_cancel
+        self.on_confirm = on_confirm
         self._last_option_up = 0.0
         self._option_held = False
         self._monitors = []
@@ -53,13 +56,21 @@ class HotkeyListener:
                 self._last_option_up = now
 
     def _handle_key_down(self, event):
-        if event.keyCode() == KEY_ESCAPE:
+        keycode = event.keyCode()
+        if keycode == KEY_ESCAPE:
             logger.info("ESC 按下，取消录音")
             if self.on_cancel:
                 try:
                     self.on_cancel()
                 except Exception as e:
                     logger.error(f"on_cancel 异常: {e}")
+        elif keycode == KEY_RETURN:
+            logger.info("回车按下，确认结果")
+            if self.on_confirm:
+                try:
+                    self.on_confirm()
+                except Exception as e:
+                    logger.error(f"on_confirm 异常: {e}")
 
     def start(self):
         if not HAS_APPKIT:

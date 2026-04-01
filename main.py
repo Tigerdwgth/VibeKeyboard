@@ -78,6 +78,7 @@ class VoiceInputApp(rumps.App):
         self.hotkey_listener = HotkeyListener(
             on_press=self._on_hotkey_press,
             on_cancel=self._on_cancel,
+            on_confirm=self._on_confirm,
         )
 
         self.status_item = rumps.MenuItem("状态: 加载中...")
@@ -116,8 +117,10 @@ class VoiceInputApp(rumps.App):
             self._hide_timer = None
 
     def _on_hotkey_press(self):
+        """双击 Option：开始/停止录音"""
         if self._is_recording:
-            self._stop_and_transcribe()
+            # 再次双击 = 和回车一样，确认并粘贴
+            self._confirm_and_paste()
             return
         if not self.engine.is_ready():
             logger.warning("模型未加载完成")
@@ -127,7 +130,6 @@ class VoiceInputApp(rumps.App):
         self._is_recording = True
         self._audio_buf = bytearray()
         self._has_voice = False
-        self._silence_start = 0.0
         self._last_stream_text = ""
         self._last_stream_len = 0
 
@@ -136,9 +138,43 @@ class VoiceInputApp(rumps.App):
         self.overlay.show("")
 
         threading.Thread(target=self._collect_audio, daemon=True).start()
-        logger.info("开始录音")
+        logger.info("开始持续录音（回车确认，ESC 取消）")
+
+    def _on_confirm(self):
+        """回车：确认当前识别结果并粘贴"""
+        if not self._is_recording:
+            return
+        self._confirm_and_paste()
+
+    def _confirm_and_paste(self):
+        """停止录音，用当前流式结果粘贴"""
+        with self._stop_lock:
+            if not self._is_recording:
+                return
+            self._is_recording = False
+
+        self.recorder.stop()
+
+        if self._last_stream_text:
+            logger.info(f"确认结果: {self._last_stream_text}")
+            threading.Thread(
+                target=self._deliver_result,
+                args=(self._last_stream_text,),
+                daemon=True,
+            ).start()
+        else:
+            # 没有流式结果，对全部音频做一次识别
+            audio_data = bytes(self._audio_buf)
+            if audio_data:
+                self._update_status("transcribing")
+                self.overlay.update_text("⏳ 识别中...")
+                threading.Thread(target=self._do_transcribe, args=(audio_data,), daemon=True).start()
+            else:
+                self.overlay.hide()
+                self._update_status("idle")
 
     def _on_cancel(self):
+        """ESC：取消录音"""
         with self._stop_lock:
             if not self._is_recording:
                 return
@@ -151,12 +187,9 @@ class VoiceInputApp(rumps.App):
 
     def _collect_audio(self):
         silence_threshold = self.config.get("silence_threshold", 500)
-        silence_duration = self.config.get("silence_timeout", 1.2)
-        max_duration = self.config.get("max_duration", 30)
         stream_interval = 0.2
 
-        start_time = time.time()
-        last_stream_time = start_time
+        last_stream_time = time.time()
 
         try:
             while self._is_recording:
@@ -169,27 +202,15 @@ class VoiceInputApp(rumps.App):
                 samples = np.frombuffer(chunk, dtype=np.int16)
                 volume = np.abs(samples).mean()
 
-                elapsed = time.time() - start_time
                 if volume > silence_threshold:
                     self._has_voice = True
-                    self._silence_start = 0.0
-                elif self._has_voice:
-                    if self._silence_start == 0.0:
-                        self._silence_start = time.time()
-                    elif time.time() - self._silence_start > silence_duration:
-                        logger.info("检测到静音，自动停止录音")
-                        self._stop_and_transcribe()
-                        return
 
+                # 持续流式识别
                 if self._has_voice and not self._stream_busy and time.time() - last_stream_time > stream_interval:
                     last_stream_time = time.time()
                     audio_snapshot = bytes(self._audio_buf)
                     threading.Thread(target=self._stream_transcribe, args=(audio_snapshot,), daemon=True).start()
 
-                if elapsed > max_duration:
-                    logger.info("达到最大录音时长，自动停止")
-                    self._stop_and_transcribe()
-                    return
         except Exception as e:
             logger.error(f"录音线程异常: {e}", exc_info=True)
             self._is_recording = False
@@ -210,33 +231,6 @@ class VoiceInputApp(rumps.App):
         finally:
             self._stream_busy = False
 
-    def _stop_and_transcribe(self):
-        with self._stop_lock:
-            if not self._is_recording:
-                return
-            self._is_recording = False
-
-        self.recorder.stop()
-
-        audio_data = bytes(self._audio_buf)
-        if not audio_data:
-            self.overlay.hide()
-            self._update_status("idle")
-            return
-
-        # 有流式结果就直接用，不重新识别
-        if self._last_stream_text:
-            logger.info(f"使用流式结果，跳过重复识别")
-            threading.Thread(
-                target=self._finish_with_text,
-                args=(self._last_stream_text,),
-                daemon=True,
-            ).start()
-        else:
-            self._update_status("transcribing")
-            self.overlay.update_text("⏳ 识别中...")
-            threading.Thread(target=self._do_transcribe, args=(audio_data,), daemon=True).start()
-
     def _polish(self, text: str) -> str:
         """去水词（本地规则，不走 LLM）"""
         return polish_local(text)
@@ -256,10 +250,6 @@ class VoiceInputApp(rumps.App):
         self.overlay.update_text(f"✅ {polished}")
         self._schedule_hide(3.0)
         self._update_status("idle")
-
-    def _finish_with_text(self, text: str):
-        """直接用已有的识别结果完成（跳过重复识别）"""
-        self._deliver_result(text)
 
     def _do_transcribe(self, audio_data: bytes):
         try:
