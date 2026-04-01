@@ -47,8 +47,7 @@ class ASREngine:
 
     def _ensure_sherpa_model(self):
         """确保 sherpa-onnx SenseVoice 模型已下载"""
-        model_file = _SHERPA_MODEL_DIR / "model.int8.onnx"
-        if model_file.exists():
+        if (_SHERPA_MODEL_DIR / "model.int8.onnx").exists() or (_SHERPA_MODEL_DIR / "model.onnx").exists():
             return True
 
         logger.info("下载 sherpa-onnx SenseVoice 模型...")
@@ -105,9 +104,14 @@ class ASREngine:
         if self.on_progress:
             self.on_progress("加载 SenseVoice-ONNX...")
 
+        # 优先用 int8 量化版，没有就用原版
+        model_file = _SHERPA_MODEL_DIR / "model.int8.onnx"
+        if not model_file.exists():
+            model_file = _SHERPA_MODEL_DIR / "model.onnx"
+
         t0 = time.time()
         self._sherpa_recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
-            model=str(_SHERPA_MODEL_DIR / "model.int8.onnx"),
+            model=str(model_file),
             tokens=str(_SHERPA_MODEL_DIR / "tokens.txt"),
             num_threads=4,
             sample_rate=16000,
