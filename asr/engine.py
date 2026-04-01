@@ -61,7 +61,7 @@ class ASREngine:
                 "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17",
                 local_dir=str(_SHERPA_MODEL_DIR),
             )
-            if model_file.exists():
+            if (_SHERPA_MODEL_DIR / "model.int8.onnx").exists() or (_SHERPA_MODEL_DIR / "model.onnx").exists():
                 logger.info("sherpa-onnx 模型下载完成 (HuggingFace)")
                 return True
         except Exception as e:
@@ -223,7 +223,6 @@ class ASREngine:
         if not blocking and self._lock.locked():
             return ""
 
-        duration = len(audio) / sample_rate
         t0 = time.time()
 
         with self._lock:

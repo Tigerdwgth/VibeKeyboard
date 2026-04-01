@@ -192,9 +192,7 @@ class OverlayWindow:
             else:
                 self._indicator.setHidden_(True)
 
-            # 有文字时自适应大小，无文字时小圆点
             if text:
-                self._text_field.setStringValue_(text)
                 self._relayout()
             else:
                 init_w = 36

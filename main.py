@@ -302,6 +302,11 @@ class VoiceInputApp(rumps.App):
             self._schedule_hide(1.5)
             self._update_status("error")
 
+    def _on_model_progress(self, msg):
+        """模型加载/下载进度回调"""
+        self.overlay.update_text(msg)
+        self.status_item.title = msg
+
     def _switch_backend(self, backend):
         if self._is_recording:
             return
@@ -309,11 +314,7 @@ class VoiceInputApp(rumps.App):
         self.backend_item.title = f"后端: 切换中..."
 
         def do_switch():
-            def on_progress(msg):
-                self.overlay.update_text(msg)
-                self.status_item.title = msg
-
-            self.engine.on_progress = on_progress
+            self.engine.on_progress = self._on_model_progress
             self.overlay.show("切换模型中...", show_indicator=False)
             self.engine.switch_backend(backend)
             self.overlay.hide()
@@ -444,12 +445,7 @@ class VoiceInputApp(rumps.App):
             self._request_mic_permission()
             self._update_status("loading")
 
-            # 进度回调 → 浮窗 + 状态栏
-            def on_progress(msg):
-                self.overlay.update_text(msg)
-                self.status_item.title = msg
-
-            self.engine.on_progress = on_progress
+            self.engine.on_progress = self._on_model_progress
             self.overlay.show("加载模型中...", show_indicator=False)
             self.engine.load_model()
             self.overlay.hide()

@@ -2,16 +2,12 @@
 
 import re
 
+_RE_CJK_ALPHA = re.compile(r"([\u4e00-\u9fff])([a-zA-Z0-9])")
+_RE_ALPHA_CJK = re.compile(r"([a-zA-Z0-9])([\u4e00-\u9fff])")
+_RE_SENTENCE_START = re.compile(r"(?<=[.!?]\s)([a-z])")
+
 
 class TextFormatter:
-    """对 ASR 识别结果进行后处理
-
-    FunASR 的 ct-punc 已处理基本标点，此模块处理额外格式化：
-    - 中英文之间加空格
-    - 英文首字母大写
-    - 自定义替换规则
-    """
-
     def __init__(self, config: dict | None = None):
         self.config = config or {}
         self.replacements: dict[str, str] = self.config.get("replacements", {})
@@ -21,34 +17,15 @@ class TextFormatter:
             return text
 
         if self.config.get("auto_spacing", True):
-            text = self._add_cjk_spacing(text)
+            text = _RE_CJK_ALPHA.sub(r"\1 \2", text)
+            text = _RE_ALPHA_CJK.sub(r"\1 \2", text)
 
         if self.config.get("capitalize", True):
-            text = self._capitalize_sentences(text)
+            if text and text[0].isalpha():
+                text = text[0].upper() + text[1:]
+            text = _RE_SENTENCE_START.sub(lambda m: m.group(1).upper(), text)
 
-        text = self._apply_replacements(text)
-
-        return text.strip()
-
-    def _add_cjk_spacing(self, text: str) -> str:
-        """中英文之间添加空格"""
-        # 中文后接英文
-        text = re.sub(r"([\u4e00-\u9fff])([a-zA-Z0-9])", r"\1 \2", text)
-        # 英文后接中文
-        text = re.sub(r"([a-zA-Z0-9])([\u4e00-\u9fff])", r"\1 \2", text)
-        return text
-
-    def _capitalize_sentences(self, text: str) -> str:
-        """句首字母大写"""
-        # 句子开头
-        if text and text[0].isalpha():
-            text = text[0].upper() + text[1:]
-        # 句号/问号/感叹号后的字母
-        text = re.sub(r"(?<=[.!?]\s)([a-z])", lambda m: m.group(1).upper(), text)
-        return text
-
-    def _apply_replacements(self, text: str) -> str:
-        """应用自定义替换规则"""
         for pattern, replacement in self.replacements.items():
             text = text.replace(pattern, replacement)
-        return text
+
+        return text.strip()

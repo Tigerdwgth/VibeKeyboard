@@ -17,7 +17,6 @@ except ImportError:
 class TextInserter:
     def __init__(self):
         self._lock = threading.Lock()
-        self._paste_works = None  # None=未测试, True/False
 
     def insert_text(self, text: str):
         if not text.strip():
