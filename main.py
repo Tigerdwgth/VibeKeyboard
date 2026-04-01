@@ -424,19 +424,17 @@ class VoiceInputApp(rumps.App):
         except Exception as e:
             logger.warning(f"获取 NSStatusItem 引用失败: {e}")
 
-    def _ensure_agent_app(self):
-        """确保以 agent app (无 Dock 图标) 模式运行，即使 Info.plist 设置有误。"""
+    def _ensure_regular_app(self):
+        """确保以 Regular 模式运行（Dock 图标 + 菜单栏都有）。"""
         try:
             if _HAS_APPKIT:
                 app = _AppKit.NSApplication.sharedApplication()
-                # kProcessTransformToUIElementApplication = 4
-                # 如果当前不是 UIElement 模式，动态切换
                 policy = app.activationPolicy()
-                if policy != _AppKit.NSApplicationActivationPolicyAccessory:
-                    app.setActivationPolicy_(_AppKit.NSApplicationActivationPolicyAccessory)
-                    logger.info("已切换到 Accessory (agent) 模式，隐藏 Dock 图标")
+                if policy != _AppKit.NSApplicationActivationPolicyRegular:
+                    app.setActivationPolicy_(_AppKit.NSApplicationActivationPolicyRegular)
+                    logger.info("已切换到 Regular 模式（Dock + 菜单栏）")
         except Exception as e:
-            logger.warning(f"设置 agent 模式失败: {e}")
+            logger.warning(f"设置 Regular 模式失败: {e}")
 
     def run(self, **options):
         self.hotkey_listener.start()
@@ -461,8 +459,8 @@ class VoiceInputApp(rumps.App):
             time.sleep(1)
             try:
                 def _post_launch():
-                    # 确保 agent 模式（无 Dock 图标）
-                    self._ensure_agent_app()
+                    # 确保 Regular 模式（Dock + 菜单栏都有）
+                    self._ensure_regular_app()
                     # 保持 NSStatusItem 强引用
                     self._retain_status_bar()
                     # 设置应用菜单
