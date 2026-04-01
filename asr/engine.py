@@ -168,14 +168,23 @@ class ASREngine:
             return
 
         t0 = time.time()
-        if key == "sherpa-sensevoice":
-            self._load_sherpa()
-        else:
-            self._load_funasr(key)
+        try:
+            if key == "sherpa-sensevoice":
+                self._load_sherpa()
+            else:
+                self._load_funasr(key)
+        except Exception as e:
+            logger.error(f"{BACKENDS[key]['name']} 加载失败: {e}")
+            if key == "sherpa-sensevoice":
+                logger.info("回退到 FunASR SenseVoice...")
+                if self.on_progress:
+                    self.on_progress("ONNX 加载失败，回退到 FunASR...")
+                self._load_funasr("sensevoice")
 
         elapsed = time.time() - t0
-        if self.on_progress:
-            self.on_progress(f"{BACKENDS[key]['name']} 已就绪 ({elapsed:.0f}s)")
+        if self.on_progress and self._current_backend:
+            name = BACKENDS.get(self._current_backend, {}).get("name", self._current_backend)
+            self.on_progress(f"{name} 已就绪 ({elapsed:.0f}s)")
 
     def switch_backend(self, backend: str):
         if backend == self._current_backend:
