@@ -121,11 +121,34 @@ PLIST
 # --- 4. PkgInfo ---
 echo -n "APPL????" > "${CONTENTS_DIR}/PkgInfo"
 
-# --- 5. 复制图标文件 ---
-OLD_ICNS="$HOME/Applications/VibeKeyboard.app.bak/Contents/Resources/applet.icns"
-if [ -f "$OLD_ICNS" ]; then
-    cp "$OLD_ICNS" "${RESOURCES_DIR}/AppIcon.icns"
-    echo "Copied icon from backup"
+# --- 5. 生成并复制图标文件 ---
+ICON_SRC="${PROJECT_DIR}/resources/appicon.png"
+ICON_ICNS="${PROJECT_DIR}/resources/AppIcon.icns"
+if [ -f "$ICON_ICNS" ]; then
+    cp "$ICON_ICNS" "${RESOURCES_DIR}/AppIcon.icns"
+    echo "Copied pre-built icon: ${ICON_ICNS}"
+elif [ -f "$ICON_SRC" ]; then
+    echo "Generating AppIcon.icns from ${ICON_SRC} ..."
+    ICONSET_DIR=$(mktemp -d)/AppIcon.iconset
+    mkdir -p "$ICONSET_DIR"
+    python3 -c "
+from PIL import Image; import os, sys
+img = Image.open(sys.argv[1])
+d = sys.argv[2]
+for s in [16,32,64,128,256,512]:
+    img.resize((s,s), Image.LANCZOS).save(os.path.join(d, f'icon_{s}x{s}.png'))
+    s2 = s*2
+    if s2 <= 1024:
+        img.resize((s2,s2), Image.LANCZOS).save(os.path.join(d, f'icon_{s}x{s}@2x.png'))
+img.resize((1024,1024), Image.LANCZOS).save(os.path.join(d, 'icon_512x512@2x.png'))
+" "$ICON_SRC" "$ICONSET_DIR"
+    iconutil -c icns "$ICONSET_DIR" -o "${RESOURCES_DIR}/AppIcon.icns"
+    # Cache for future builds
+    cp "${RESOURCES_DIR}/AppIcon.icns" "$ICON_ICNS"
+    rm -rf "$(dirname "$ICONSET_DIR")"
+    echo "Generated and cached AppIcon.icns"
+else
+    echo "WARNING: No icon source found at ${ICON_SRC}"
 fi
 
 # --- 6. 验证构建 ---

@@ -24,7 +24,7 @@ def _on_main(fn):
 _W_DEFAULT = 420
 _W_MAX = 520
 _H_MIN = 40
-_H_MAX = 160
+_H_MAX = 300
 _CORNER_RADIUS = 10
 
 
@@ -87,7 +87,7 @@ class OverlayWindow:
         )
         bg.addSubview_(self._indicator)
 
-        # 文字 — 支持最多 3 行自动换行
+        # 文字 — 支持自动换行，行数不限
         self._text_field = AppKit.NSTextField.alloc().initWithFrame_(
             Foundation.NSMakeRect(32, 0, W - 44, H)
         )
@@ -100,7 +100,7 @@ class OverlayWindow:
         )
         self._text_field.setTextColor_(AppKit.NSColor.blackColor())
         self._text_field.setLineBreakMode_(AppKit.NSLineBreakByWordWrapping)
-        self._text_field.setMaximumNumberOfLines_(3)
+        self._text_field.setMaximumNumberOfLines_(0)
         self._text_field.setStringValue_("")
         # 让 cell 也支持换行
         self._text_field.cell().setWraps_(True)
