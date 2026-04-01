@@ -71,7 +71,7 @@ class VoiceInputApp(rumps.App):
         self.recorder = AudioRecorder()
         self.inserter = TextInserter()
         self.engine = ASREngine(
-            backend=self.config.get("asr_backend", "sensevoice"),
+            backend=self.config.get("asr_backend", "sherpa-sensevoice"),
             hotwords=self.hotword_manager.get_hotwords_string(),
         )
 
@@ -91,8 +91,9 @@ class VoiceInputApp(rumps.App):
             self.status_item,
             self.backend_item,
             None,
-            rumps.MenuItem("切换到 Paraformer（热词）", callback=self._switch_to_paraformer),
-            rumps.MenuItem("切换到 SenseVoice（快速）", callback=self._switch_to_sensevoice),
+            rumps.MenuItem("切换: SenseVoice-ONNX（最快）", callback=lambda _: self._switch_backend("sherpa-sensevoice")),
+            rumps.MenuItem("切换: SenseVoice-FunASR", callback=lambda _: self._switch_backend("sensevoice")),
+            rumps.MenuItem("切换: Paraformer（热词）", callback=lambda _: self._switch_backend("paraformer")),
             self.hotwords_info,
             rumps.MenuItem("设置...", callback=self._open_settings),
             None,
@@ -278,12 +279,6 @@ class VoiceInputApp(rumps.App):
             self.overlay.update_text("❌ 识别出错")
             self._schedule_hide(1.5)
             self._update_status("error")
-
-    def _switch_to_paraformer(self, _):
-        self._switch_backend("paraformer")
-
-    def _switch_to_sensevoice(self, _):
-        self._switch_backend("sensevoice")
 
     def _switch_backend(self, backend):
         if self._is_recording:
