@@ -1,5 +1,7 @@
 """麦克风音频采集模块"""
 
+from __future__ import annotations
+
 import logging
 import queue
 

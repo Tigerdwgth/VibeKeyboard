@@ -68,7 +68,7 @@ class OverlayWindow:
         bg.setMaterial_(AppKit.NSVisualEffectMaterialHUDWindow)
         bg.setBlendingMode_(AppKit.NSVisualEffectBlendingModeBehindWindow)
         bg.setState_(AppKit.NSVisualEffectStateActive)
-        bg.setMaskImage_(self._get_mask(W, H, _CORNER_RADIUS))
+        bg.setMaskImage_(self._get_mask(W, H))
         self._window.setContentView_(bg)
         self._bg = bg
 
@@ -153,7 +153,7 @@ class OverlayWindow:
 
         # 同步背景 + mask
         self._bg.setFrame_(Foundation.NSMakeRect(0, 0, new_w, new_h))
-        self._bg.setMaskImage_(self._get_mask(new_w, new_h, _CORNER_RADIUS))
+        self._bg.setMaskImage_(self._get_mask(new_w, new_h))
 
         # 文字垂直居中
         text_field_h = min(text_h + 4, new_h - 4)
@@ -182,7 +182,7 @@ class OverlayWindow:
             frame.size.height = _H_MIN
             self._window.setFrame_display_(frame, True)
             self._bg.setFrame_(Foundation.NSMakeRect(0, 0, init_w, _H_MIN))
-            self._bg.setMaskImage_(self._get_mask(init_w, _H_MIN, _CORNER_RADIUS))
+            self._bg.setMaskImage_(self._get_mask(init_w, _H_MIN))
             self._text_field.setFrame_(Foundation.NSMakeRect(32, 0, 1, _H_MIN))
             indicator_y = (_H_MIN - 10) / 2.0
             self._indicator.setFrameOrigin_(Foundation.NSMakePoint(14, indicator_y))
