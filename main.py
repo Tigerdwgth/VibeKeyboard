@@ -179,31 +179,31 @@ class VoiceInputApp(rumps.App):
         self._confirm_and_paste()
 
     def _confirm_and_paste(self):
-        """停止录音，用当前流式结果粘贴"""
+        """停止录音，立刻粘贴并关闭浮窗"""
         with self._stop_lock:
             if not self._is_recording:
                 return
             self._is_recording = False
 
         self.recorder.stop()
+        text = self._last_stream_text
 
-        if self._last_stream_text:
-            logger.info(f"确认结果: {self._last_stream_text}")
+        # 立刻关闭浮窗
+        self.overlay.hide()
+        self._update_status("idle")
+
+        if text:
+            # 后台做格式化+粘贴（不阻塞）
             threading.Thread(
-                target=self._deliver_result,
-                args=(self._last_stream_text,),
+                target=self._quick_paste,
+                args=(text,),
                 daemon=True,
             ).start()
         else:
             # 没有流式结果，对全部音频做一次识别
             audio_data = bytes(self._audio_buf)
             if audio_data:
-                self._update_status("transcribing")
-                self.overlay.update_text("⏳ 识别中...")
                 threading.Thread(target=self._do_transcribe, args=(audio_data,), daemon=True).start()
-            else:
-                self.overlay.hide()
-                self._update_status("idle")
 
     def _on_cancel(self):
         """ESC：取消录音"""
@@ -272,6 +272,13 @@ class VoiceInputApp(rumps.App):
         self._cancel_hide_timer()
         self._hide_timer = threading.Timer(delay, self.overlay.hide)
         self._hide_timer.start()
+
+    def _quick_paste(self, text: str):
+        """格式化 → 润色 → 立刻粘贴，不显示结果浮窗"""
+        formatted = self.formatter.format(text)
+        polished = self._polish(formatted)
+        logger.info(f"快速粘贴: {polished}")
+        self.inserter.insert_text(polished)
 
     def _deliver_result(self, text: str):
         """公共结果输出流程：格式化 → 润色 → 插入 → 展示"""
