@@ -382,17 +382,40 @@ class VoiceInputApp(rumps.App):
             import objc
 
             class MenuHandler(AppKit.NSObject):
+                _actions = {}
+
                 @objc.python_method
-                def initWithCallback_(self, callback):
+                def registerAction_(self, name, callback):
+                    self._actions[name] = callback
+
+                @objc.python_method
+                def initWithActions_(self, actions):
                     self = objc.super(MenuHandler, self).init()
-                    self._callback = callback
+                    self._actions = dict(actions)
                     return self
 
                 def openPrefs_(self, sender):
-                    if self._callback:
-                        self._callback(None)
+                    if "prefs" in self._actions:
+                        self._actions["prefs"](None)
 
-            self._menu_handler = MenuHandler.alloc().initWithCallback_(self._open_settings)
+                def switchSherpa_(self, sender):
+                    if "sherpa" in self._actions:
+                        self._actions["sherpa"]()
+
+                def switchSenseVoice_(self, sender):
+                    if "sensevoice" in self._actions:
+                        self._actions["sensevoice"]()
+
+                def switchParaformer_(self, sender):
+                    if "paraformer" in self._actions:
+                        self._actions["paraformer"]()
+
+            self._menu_handler = MenuHandler.alloc().initWithActions_({
+                "prefs": self._open_settings,
+                "sherpa": lambda: self._switch_backend("sherpa-sensevoice"),
+                "sensevoice": lambda: self._switch_backend("sensevoice"),
+                "paraformer": lambda: self._switch_backend("paraformer"),
+            })
 
             mainMenu = AppKit.NSApp.mainMenu()
             if mainMenu is None:
@@ -401,13 +424,48 @@ class VoiceInputApp(rumps.App):
 
             appMenu = AppKit.NSMenu.alloc().initWithTitle_("VoiceInput")
 
+            # 首选项 Cmd+,
             prefsItem = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
                 "首选项...", "openPrefs:", ","
             )
             prefsItem.setTarget_(self._menu_handler)
             appMenu.addItem_(prefsItem)
+
             appMenu.addItem_(AppKit.NSMenuItem.separatorItem())
 
+            # 后端切换子菜单
+            backendMenu = AppKit.NSMenu.alloc().initWithTitle_("ASR 后端")
+
+            item1 = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                "SenseVoice-ONNX（最快）", "switchSherpa:", "1"
+            )
+            item1.setTarget_(self._menu_handler)
+            item1.setKeyEquivalentModifierMask_(AppKit.NSEventModifierFlagCommand)
+            backendMenu.addItem_(item1)
+
+            item2 = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                "SenseVoice-FunASR", "switchSenseVoice:", "2"
+            )
+            item2.setTarget_(self._menu_handler)
+            item2.setKeyEquivalentModifierMask_(AppKit.NSEventModifierFlagCommand)
+            backendMenu.addItem_(item2)
+
+            item3 = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                "Paraformer（热词）", "switchParaformer:", "3"
+            )
+            item3.setTarget_(self._menu_handler)
+            item3.setKeyEquivalentModifierMask_(AppKit.NSEventModifierFlagCommand)
+            backendMenu.addItem_(item3)
+
+            backendMenuItem = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                "ASR 后端", None, ""
+            )
+            backendMenuItem.setSubmenu_(backendMenu)
+            appMenu.addItem_(backendMenuItem)
+
+            appMenu.addItem_(AppKit.NSMenuItem.separatorItem())
+
+            # 退出 Cmd+Q
             quitItem = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
                 "退出 VoiceInput", "terminate:", "q"
             )
