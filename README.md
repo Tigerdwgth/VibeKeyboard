@@ -1,4 +1,4 @@
-# VoiceInk 🎤
+# VibeKeyboard 🎤
 
 macOS 本地语音输入工具。双击 Option 开始说话，实时显示识别结果，回车确认自动粘贴。完全离线，无需云端 API。
 
@@ -57,8 +57,8 @@ conda install -c conda-forge numba llvmlite -y
 ### 2. Install dependencies
 
 ```bash
-git clone https://github.com/Tigerdwgth/VoiceInk.git
-cd VoiceInk
+git clone https://github.com/Tigerdwgth/VibeKeyboard.git
+cd VibeKeyboard
 
 pip install torch torchaudio
 pip install "numpy<2" funasr sounddevice rumps sherpa-onnx \
@@ -73,7 +73,7 @@ pip install "numpy<2" funasr sounddevice rumps sherpa-onnx \
 bash build_app.sh
 
 # Launch
-open ~/Applications/VoiceInput.app
+open ~/Applications/VibeKeyboard.app
 ```
 
 First launch will download the SenseVoice-ONNX model (~230MB). Grant **microphone** and **accessibility** permissions when prompted.
@@ -82,7 +82,7 @@ First launch will download the SenseVoice-ONNX model (~230MB). Grant **microphon
 
 ```bash
 source ~/miniconda3/bin/activate voice-input
-cd VoiceInk
+cd VibeKeyboard
 python main.py
 ```
 
@@ -93,7 +93,7 @@ python main.py
 | Start recording | Double-tap **Option** |
 | Confirm & paste | **Enter** or double-tap **Option** again |
 | Cancel recording | **ESC** |
-| Open settings | **Cmd+,** or menubar → VoiceInput → Settings |
+| Open settings | **Cmd+,** or menubar → VibeKeyboard → Settings |
 
 ### Workflow
 
@@ -143,7 +143,7 @@ RLHF
 ## Project Structure
 
 ```
-VoiceInk/
+VibeKeyboard/
 ├── main.py              # Entry point, menubar app, recording orchestration
 ├── asr/
 │   ├── engine.py        # Three-backend ASR engine (sherpa-onnx / FunASR)

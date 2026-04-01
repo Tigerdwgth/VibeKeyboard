@@ -29,7 +29,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>VoiceInput Settings</title>
+<title>VibeKeyboard Settings</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -126,7 +126,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </style>
 </head>
 <body>
-<h1>VoiceInput Settings</h1>
+<h1>VibeKeyboard Settings</h1>
 
 <div class="section">
   <div class="section-title">Recording</div>
@@ -301,7 +301,7 @@ def _open_native_settings(config, hotwords, on_save=None):
             AppKit.NSBackingStoreBuffered,
             False,
         )
-        window.setTitle_("VoiceInput Settings")
+        window.setTitle_("VibeKeyboard Settings")
         window.center()
         window.setLevel_(AppKit.NSFloatingWindowLevel)
 

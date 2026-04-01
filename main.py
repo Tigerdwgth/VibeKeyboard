@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VoiceInk — macOS 语音输入工具
+"""VibeKeyboard — macOS 语音输入工具
 
 基于 FunASR 的中英混合语音输入，双击 Option 开始录音，VAD 静音自动停止。
 """
@@ -42,7 +42,7 @@ logging.basicConfig(
         logging.FileHandler(BASE_DIR / "voice-input.log", encoding="utf-8"),
     ],
 )
-logger = logging.getLogger("VoiceInput")
+logger = logging.getLogger("VibeKeyboard")
 
 
 def load_config() -> dict:
@@ -64,9 +64,9 @@ def _run_on_main(fn):
         fn()
 
 
-class VoiceInputApp(rumps.App):
+class VibeKeyboardApp(rumps.App):
     def __init__(self):
-        super().__init__(name="VoiceInput", title="🎤")
+        super().__init__(name="VibeKeyboard", title="🎤")
 
         # 保持对 NSStatusBar item 的强引用，防止 GC 回收
         self._status_bar_item = None
@@ -333,7 +333,7 @@ class VoiceInputApp(rumps.App):
             name = self.engine.current_backend_name
             self.backend_item.title = f"后端: {name}"
             self._update_status("idle")
-            rumps.notification("VoiceInput", "", f"已切换到 {name}", sound=False)
+            rumps.notification("VibeKeyboard", "", f"已切换到 {name}", sound=False)
 
         threading.Thread(target=do_switch, daemon=True).start()
 
@@ -422,7 +422,7 @@ class VoiceInputApp(rumps.App):
                 mainMenu = AppKit.NSMenu.alloc().init()
                 AppKit.NSApp.setMainMenu_(mainMenu)
 
-            appMenu = AppKit.NSMenu.alloc().initWithTitle_("VoiceInput")
+            appMenu = AppKit.NSMenu.alloc().initWithTitle_("VibeKeyboard")
 
             # 首选项 Cmd+,
             prefsItem = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
@@ -467,7 +467,7 @@ class VoiceInputApp(rumps.App):
 
             # 退出 Cmd+Q
             quitItem = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-                "退出 VoiceInput", "terminate:", "q"
+                "退出 VibeKeyboard", "terminate:", "q"
             )
             appMenu.addItem_(quitItem)
 
@@ -519,7 +519,7 @@ class VoiceInputApp(rumps.App):
 
             self.backend_item.title = f"后端: {self.engine.current_backend_name}"
             self._update_status("idle")
-            rumps.notification("VoiceInput", "", f"{self.engine.current_backend_name} 已就绪，双击 Option 开始语音输入", sound=True)
+            rumps.notification("VibeKeyboard", "", f"{self.engine.current_backend_name} 已就绪，双击 Option 开始语音输入", sound=True)
 
         threading.Thread(target=load_model, daemon=True).start()
 
@@ -544,7 +544,7 @@ class VoiceInputApp(rumps.App):
 
 def main():
     signal.signal(signal.SIGINT, signal.SIG_DFL)
-    app = VoiceInputApp()
+    app = VibeKeyboardApp()
     try:
         app.run()
     except KeyboardInterrupt:

@@ -1,4 +1,4 @@
-# VoiceInk — CLAUDE.md
+# VibeKeyboard — CLAUDE.md
 
 ## 已知 Bug 和踩坑记录
 
@@ -26,7 +26,7 @@
 
 ### 构建和部署
 - **x86_64 miniconda**: macair 上旧版 miniconda 是 x86_64 (Rosetta)，导致性能差、权限路径不对。已换成 arm64 原生 miniconda3。
-- **SSH 启动 GUI**: 通过 SSH `open VoiceInput.app` 启动的进程无法显示菜单栏图标。必须从 macOS 本地 GUI 会话启动（Finder 双击或本地终端 `open`）。
+- **SSH 启动 GUI**: 通过 SSH `open VibeKeyboard.app` 启动的进程无法显示菜单栏图标。必须从 macOS 本地 GUI 会话启动（Finder 双击或本地终端 `open`）。
 
 ## 项目结构
 

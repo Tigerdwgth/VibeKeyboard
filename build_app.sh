@@ -1,9 +1,9 @@
 #!/bin/bash
-# build_app.sh — 构建 VoiceInput.app
+# build_app.sh — 构建 VibeKeyboard.app
 #
 # 创建一个标准的 macOS .app bundle:
-#   MacOS/VoiceInput-launcher  (shell 脚本, CFBundleExecutable)
-#   MacOS/VoiceInput-python    (python3 硬链接, 实际执行)
+#   MacOS/VibeKeyboard-launcher  (shell 脚本, CFBundleExecutable)
+#   MacOS/VibeKeyboard-python    (python3 硬链接, 实际执行)
 #
 # shell 脚本设置环境后 exec python3 硬链接。
 # 因为 python3 硬链接在 .app/Contents/MacOS/ 下，
@@ -11,12 +11,12 @@
 #
 # 用法:
 #   bash build_app.sh
-#   # 输出: ~/Applications/VoiceInput.app
+#   # 输出: ~/Applications/VibeKeyboard.app
 
 set -euo pipefail
 
-APP_NAME="VoiceInput"
-BUNDLE_ID="com.gsj.voiceinput"
+APP_NAME="VibeKeyboard"
+BUNDLE_ID="com.gsj.vibekeyboard"
 APP_DIR="$HOME/Applications/${APP_NAME}.app"
 CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
@@ -52,7 +52,7 @@ echo "Created hardlink: ${MACOS_DIR}/${APP_NAME}-python -> $(readlink -f "$PYTHO
 # --- 2. 启动器脚本 ---
 cat > "${MACOS_DIR}/${APP_NAME}-launcher" << LAUNCHER
 #!/bin/bash
-# VoiceInput launcher — sets up conda env then exec's the python3 hardlink
+# VibeKeyboard launcher — sets up conda env then exec's the python3 hardlink
 # The hardlink lives inside the .app bundle, so TCC grants permissions to this .app
 
 export HOME="\${HOME:-\$HOME}"
@@ -72,11 +72,11 @@ export DYLD_LIBRARY_PATH="\${CONDA_ENV}/lib:\${DYLD_LIBRARY_PATH:-}"
 cd "\$PROJECT_DIR"
 
 # Log startup
-echo "\$(date): VoiceInput.app starting, PID=\$\$" >> /tmp/voiceinput.log
+echo "\$(date): VibeKeyboard.app starting, PID=\$\$" >> /tmp/vibekeyboard.log
 
 # exec replaces this shell process with the python3 hardlink binary.
 # Since the binary is inside MacOS/, TCC associates permissions with the .app
-exec "\${APP_MACOS_DIR}/${APP_NAME}-python" "\$PROJECT_DIR/main.py" >> /tmp/voiceinput.log 2>&1
+exec "\${APP_MACOS_DIR}/${APP_NAME}-python" "\$PROJECT_DIR/main.py" >> /tmp/vibekeyboard.log 2>&1
 LAUNCHER
 chmod +x "${MACOS_DIR}/${APP_NAME}-launcher"
 
@@ -111,9 +111,9 @@ cat > "${CONTENTS_DIR}/Info.plist" << PLIST
     <key>LSUIElement</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>VoiceInput needs microphone access to record and transcribe speech.</string>
+    <string>VibeKeyboard needs microphone access to record and transcribe speech.</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>VoiceInput needs to control other applications to insert transcribed text.</string>
+    <string>VibeKeyboard needs to control other applications to insert transcribed text.</string>
 </dict>
 </plist>
 PLIST
@@ -122,7 +122,7 @@ PLIST
 echo -n "APPL????" > "${CONTENTS_DIR}/PkgInfo"
 
 # --- 5. 复制图标文件 ---
-OLD_ICNS="$HOME/Applications/VoiceInput.app.bak/Contents/Resources/applet.icns"
+OLD_ICNS="$HOME/Applications/VibeKeyboard.app.bak/Contents/Resources/applet.icns"
 if [ -f "$OLD_ICNS" ]; then
     cp "$OLD_ICNS" "${RESOURCES_DIR}/AppIcon.icns"
     echo "Copied icon from backup"

@@ -1,10 +1,10 @@
 #!/bin/bash
-# VoiceInk 一键安装脚本
+# VibeKeyboard 一键安装脚本
 # 下载后运行: bash install.sh
 set -e
 
 echo "=============================="
-echo "  VoiceInk Installer"
+echo "  VibeKeyboard Installer"
 echo "  macOS 本地语音输入工具"
 echo "=============================="
 echo ""
@@ -75,7 +75,7 @@ print('done')
 fi
 
 # ---- 5. 构建 .app ----
-echo "[5/5] 构建 VoiceInput.app..."
+echo "[5/5] 构建 VibeKeyboard.app..."
 cd "$PROJECT_DIR"
 bash build_app.sh
 
@@ -84,7 +84,7 @@ echo "=============================="
 echo "  安装完成！"
 echo ""
 echo "  启动方式："
-echo "    双击 ~/Applications/VoiceInput.app"
+echo "    双击 ~/Applications/VibeKeyboard.app"
 echo ""
 echo "  首次启动请授予："
 echo "    - 麦克风权限"
@@ -96,8 +96,8 @@ echo "    ESC 取消"
 echo "=============================="
 
 # 询问是否立即启动
-read -p "现在启动 VoiceInput？[Y/n] " -n 1 -r
+read -p "现在启动 VibeKeyboard？[Y/n] " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-    open "$APP_DIR/VoiceInput.app"
+    open "$APP_DIR/VibeKeyboard.app"
 fi
