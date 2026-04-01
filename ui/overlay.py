@@ -175,17 +175,21 @@ class OverlayWindow:
             )
             self._indicator.setHidden_(False)
 
-            # 初始小尺寸
-            init_w = 36
-            frame = self._window.frame()
-            frame.size.width = init_w
-            frame.size.height = _H_MIN
-            self._window.setFrame_display_(frame, True)
-            self._bg.setFrame_(Foundation.NSMakeRect(0, 0, init_w, _H_MIN))
-            self._bg.setMaskImage_(self._get_mask(init_w, _H_MIN))
-            self._text_field.setFrame_(Foundation.NSMakeRect(32, 0, 1, _H_MIN))
-            indicator_y = (_H_MIN - 10) / 2.0
-            self._indicator.setFrameOrigin_(Foundation.NSMakePoint(14, indicator_y))
+            # 有文字时自适应大小，无文字时小圆点
+            if text:
+                self._text_field.setStringValue_(text)
+                self._relayout()
+            else:
+                init_w = 36
+                frame = self._window.frame()
+                frame.size.width = init_w
+                frame.size.height = _H_MIN
+                self._window.setFrame_display_(frame, True)
+                self._bg.setFrame_(Foundation.NSMakeRect(0, 0, init_w, _H_MIN))
+                self._bg.setMaskImage_(self._get_mask(init_w, _H_MIN))
+                self._text_field.setFrame_(Foundation.NSMakeRect(32, 0, 1, _H_MIN))
+                indicator_y = (_H_MIN - 10) / 2.0
+                self._indicator.setFrameOrigin_(Foundation.NSMakePoint(14, indicator_y))
 
             # 跟随鼠标光标位置
             mouse = AppKit.NSEvent.mouseLocation()
