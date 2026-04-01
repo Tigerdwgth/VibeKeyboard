@@ -52,14 +52,17 @@ class OverlayWindow:
         self._window.setLevel_(AppKit.NSFloatingWindowLevel)
         self._window.setOpaque_(False)
         self._window.setBackgroundColor_(AppKit.NSColor.clearColor())
-        self._window.setIgnoresMouseEvents_(False)
-        self._window.setMovableByWindowBackground_(True)
+        self._window.setIgnoresMouseEvents_(True)
+        self._window.setMovableByWindowBackground_(False)
         self._window.setHasShadow_(True)
         self._window.setCollectionBehavior_(
             AppKit.NSWindowCollectionBehaviorCanJoinAllSpaces
             | AppKit.NSWindowCollectionBehaviorStationary
+            | AppKit.NSWindowCollectionBehaviorTransient
         )
         self._window.setAlphaValue_(0.0)
+        # 不显示在 Mission Control 或 App Switcher 中
+        self._window.setHidesOnDeactivate_(False)
 
         # 毛玻璃背景 — 用 maskImage 实现圆角，避免 layer cornerRadius 的白边问题
         bg = AppKit.NSVisualEffectView.alloc().initWithFrame_(

@@ -15,6 +15,12 @@ from pathlib import Path
 import numpy as np
 import rumps
 
+try:
+    import AppKit as _AppKit
+    _HAS_APPKIT = True
+except ImportError:
+    _HAS_APPKIT = False
+
 from asr.engine import ASREngine
 from asr.formatter import TextFormatter
 from asr.polisher import polish_local
@@ -50,9 +56,20 @@ def load_config() -> dict:
     return {}
 
 
+def _run_on_main(fn):
+    """确保 fn 在主线程执行（AppKit-safe）。"""
+    if _HAS_APPKIT:
+        _AppKit.NSOperationQueue.mainQueue().addOperationWithBlock_(fn)
+    else:
+        fn()
+
+
 class VoiceInputApp(rumps.App):
     def __init__(self):
         super().__init__(name="VoiceInput", title="🎤")
+
+        # 保持对 NSStatusBar item 的强引用，防止 GC 回收
+        self._status_bar_item = None
 
         self.config = load_config()
         self._stop_lock = threading.Lock()
@@ -100,6 +117,20 @@ class VoiceInputApp(rumps.App):
             None,
         ]
 
+    def _set_title_safe(self, new_title: str):
+        """线程安全地设置 menubar title（必须在主线程操作 NSStatusItem）。"""
+        def _do():
+            try:
+                self.title = new_title
+                # 双重保险：如果 rumps 内部的 _status_bar 可用，直接操作确保不被 GC
+                if hasattr(self, '_nsapp') and self._nsapp:
+                    sb = getattr(self._nsapp, '_status_bar', None)
+                    if sb:
+                        sb.setTitle_(new_title)
+            except Exception as e:
+                logger.error(f"设置 menubar title 失败: {e}")
+        _run_on_main(_do)
+
     def _update_status(self, status: str):
         status_map = {
             "idle": "状态: 空闲（双击Option录音）",
@@ -109,7 +140,8 @@ class VoiceInputApp(rumps.App):
             "error": "状态: 错误",
         }
         self.status_item.title = status_map.get(status, f"状态: {status}")
-        self.title = "🔴" if status == "recording" else "🎤"
+        new_title = "🔴" if status == "recording" else "🎤"
+        self._set_title_safe(new_title)
 
     def _cancel_hide_timer(self):
         if self._hide_timer:
@@ -380,6 +412,31 @@ class VoiceInputApp(rumps.App):
         except Exception as e:
             logger.error(f"添加应用菜单失败: {e}")
 
+    def _retain_status_bar(self):
+        """获取并保持 NSStatusItem 的强引用，防止 macOS GC 回收导致图标消失。"""
+        try:
+            if _HAS_APPKIT and hasattr(self, '_nsapp') and self._nsapp:
+                sb = getattr(self._nsapp, '_status_bar', None)
+                if sb:
+                    self._status_bar_item = sb
+                    logger.info("已保持 NSStatusItem 强引用")
+        except Exception as e:
+            logger.warning(f"获取 NSStatusItem 引用失败: {e}")
+
+    def _ensure_agent_app(self):
+        """确保以 agent app (无 Dock 图标) 模式运行，即使 Info.plist 设置有误。"""
+        try:
+            if _HAS_APPKIT:
+                app = _AppKit.NSApplication.sharedApplication()
+                # kProcessTransformToUIElementApplication = 4
+                # 如果当前不是 UIElement 模式，动态切换
+                policy = app.activationPolicy()
+                if policy != _AppKit.NSApplicationActivationPolicyAccessory:
+                    app.setActivationPolicy_(_AppKit.NSApplicationActivationPolicyAccessory)
+                    logger.info("已切换到 Accessory (agent) 模式，隐藏 Dock 图标")
+        except Exception as e:
+            logger.warning(f"设置 agent 模式失败: {e}")
+
     def run(self, **options):
         self.hotkey_listener.start()
 
@@ -404,15 +461,21 @@ class VoiceInputApp(rumps.App):
 
         threading.Thread(target=load_model, daemon=True).start()
 
-        def setup_menu():
+        def setup_after_launch():
             time.sleep(1)
             try:
-                import AppKit
-                AppKit.NSOperationQueue.mainQueue().addOperationWithBlock_(self._setup_app_menu)
+                def _post_launch():
+                    # 确保 agent 模式（无 Dock 图标）
+                    self._ensure_agent_app()
+                    # 保持 NSStatusItem 强引用
+                    self._retain_status_bar()
+                    # 设置应用菜单
+                    self._setup_app_menu()
+                _run_on_main(_post_launch)
             except Exception as e:
-                logger.error(f"设置菜单失败: {e}")
+                logger.error(f"启动后设置失败: {e}")
 
-        threading.Thread(target=setup_menu, daemon=True).start()
+        threading.Thread(target=setup_after_launch, daemon=True).start()
 
         super().run(**options)
 
