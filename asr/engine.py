@@ -46,41 +46,41 @@ class ASREngine:
         self.on_progress: Callable[[str], None] | None = None
 
     def _ensure_sherpa_model(self):
-        """确保 sherpa-onnx SenseVoice 模型已下载，带进度显示"""
+        """确保 sherpa-onnx SenseVoice 模型已下载"""
         model_file = _SHERPA_MODEL_DIR / "model.int8.onnx"
         if model_file.exists():
             return True
 
-        import subprocess
-        import urllib.request
+        logger.info("下载 sherpa-onnx SenseVoice 模型...")
+        if self.on_progress:
+            self.on_progress("下载 SenseVoice 模型...")
 
+        # 优先用 huggingface_hub（更快更稳定）
+        try:
+            from huggingface_hub import snapshot_download
+            snapshot_download(
+                "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17",
+                local_dir=str(_SHERPA_MODEL_DIR),
+            )
+            if model_file.exists():
+                logger.info("sherpa-onnx 模型下载完成 (HuggingFace)")
+                return True
+        except Exception as e:
+            logger.warning(f"HuggingFace 下载失败: {e}，尝试 GitHub...")
+
+        # 回退：GitHub 下载
+        import subprocess
         cache_dir = _SHERPA_MODEL_DIR.parent
         cache_dir.mkdir(parents=True, exist_ok=True)
         archive = cache_dir / "sensevoice.tar.bz2"
 
-        logger.info("下载 sherpa-onnx SenseVoice 模型...")
-
         try:
-            # 用 urllib 下载，带进度回调
-            req = urllib.request.Request(_SHERPA_MODEL_URL)
-            with urllib.request.urlopen(req, timeout=600) as resp:
-                total = int(resp.headers.get("Content-Length", 0))
-                total_mb = total / (1024 * 1024) if total else 230
-
-                downloaded = 0
-                chunk_size = 256 * 1024  # 256KB
-                with open(archive, "wb") as f:
-                    while True:
-                        chunk = resp.read(chunk_size)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        mb = downloaded / (1024 * 1024)
-                        pct = int(downloaded / total * 100) if total else 0
-                        if self.on_progress:
-                            self.on_progress(f"下载模型... {pct}% ({mb:.0f}/{total_mb:.0f}MB)")
-
+            if self.on_progress:
+                self.on_progress("从 GitHub 下载模型...")
+            subprocess.run(
+                ["curl", "-SL", "-o", str(archive), _SHERPA_MODEL_URL],
+                check=True, timeout=600,
+            )
             if self.on_progress:
                 self.on_progress("解压模型...")
             subprocess.run(
@@ -88,10 +88,10 @@ class ASREngine:
                 check=True, timeout=120,
             )
             archive.unlink(missing_ok=True)
-            logger.info("sherpa-onnx 模型下载完成")
+            logger.info("sherpa-onnx 模型下载完成 (GitHub)")
             return True
         except Exception as e:
-            logger.error(f"sherpa-onnx 模型下载失败: {e}")
+            logger.error(f"模型下载失败: {e}")
             archive.unlink(missing_ok=True)
             return False
 

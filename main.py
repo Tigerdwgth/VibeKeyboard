@@ -292,7 +292,7 @@ class VoiceInputApp(rumps.App):
                 self.status_item.title = msg
 
             self.engine.on_progress = on_progress
-            self.overlay.show("切换模型中...")
+            self.overlay.show("切换模型中...", show_indicator=False)
             self.engine.switch_backend(backend)
             self.overlay.hide()
             self.engine.on_progress = None
@@ -403,7 +403,7 @@ class VoiceInputApp(rumps.App):
                 self.status_item.title = msg
 
             self.engine.on_progress = on_progress
-            self.overlay.show("加载模型中...")
+            self.overlay.show("加载模型中...", show_indicator=False)
             self.engine.load_model()
             self.overlay.hide()
             self.engine.on_progress = None

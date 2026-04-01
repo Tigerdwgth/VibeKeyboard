@@ -164,16 +164,19 @@ class OverlayWindow:
         indicator_y = (new_h - 10) / 2.0
         self._indicator.setFrameOrigin_(Foundation.NSMakePoint(14, indicator_y))
 
-    def show(self, text: str = ""):
+    def show(self, text: str = "", show_indicator: bool = True):
         if not HAS_APPKIT or not self._window:
             return
 
         def _show():
             self._text_field.setStringValue_(text)
-            self._indicator.layer().setBackgroundColor_(
-                AppKit.NSColor.systemRedColor().CGColor()
-            )
-            self._indicator.setHidden_(False)
+            if show_indicator:
+                self._indicator.layer().setBackgroundColor_(
+                    AppKit.NSColor.systemRedColor().CGColor()
+                )
+                self._indicator.setHidden_(False)
+            else:
+                self._indicator.setHidden_(True)
 
             # 有文字时自适应大小，无文字时小圆点
             if text:
