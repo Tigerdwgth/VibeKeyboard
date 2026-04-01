@@ -23,7 +23,7 @@ except ImportError:
 
 from asr.engine import ASREngine
 from asr.formatter import TextFormatter
-from asr.polisher import polish_local
+from asr.polisher import polish_local, polish_with_llm
 from asr.hotwords import HotwordManager
 from audio.recorder import AudioRecorder
 from hotkey.listener import HotkeyListener
@@ -264,7 +264,10 @@ class VoiceInputApp(rumps.App):
             self._stream_busy = False
 
     def _polish(self, text: str) -> str:
-        """去水词（本地规则，不走 LLM）"""
+        """去水词：有 LLM 用 LLM，没有用本地规则"""
+        llm_url = self.config.get("llm_api_url", "")
+        if llm_url:
+            return polish_with_llm(text, self.config)
         return polish_local(text)
 
     def _schedule_hide(self, delay: float):
