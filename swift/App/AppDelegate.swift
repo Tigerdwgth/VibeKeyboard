@@ -33,18 +33,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func requestMicrophonePermission() {
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
-            NSLog("[VibeKeyboard] Microphone permission already granted")
+            NSLog("[VibeKeyboard] Microphone permission OK")
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .audio) { granted in
                 NSLog("[VibeKeyboard] Microphone permission \(granted ? "granted" : "denied")")
             }
         case .denied, .restricted:
-            NSLog("[VibeKeyboard] Microphone permission denied/restricted — opening System Settings")
-            DispatchQueue.main.async {
-                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
-                    NSWorkspace.shared.open(url)
-                }
-            }
+            // Don't auto-open settings — user already made their choice
+            NSLog("[VibeKeyboard] Microphone permission denied/restricted")
         @unknown default:
             break
         }
