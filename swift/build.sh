@@ -14,6 +14,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"
 OUTPUT="$BUILD_DIR/VibeKeyboard"
 
+# sherpa-onnx paths
+SHERPA_ONNX_LIB="/Users/gsj/miniconda3/envs/voice-input/lib/python3.10/site-packages/sherpa_onnx/lib"
+
 # All Swift source files (SwiftUI @main entry point + all modules)
 SOURCES=(
     # App layer (SwiftUI entry point + ViewModel + AppDelegate)
@@ -82,6 +85,10 @@ swiftc \
     -O \
     -whole-module-optimization \
     -target arm64-apple-macos13.0 \
+    -import-objc-header "$SCRIPT_DIR/BridgingHeader.h" \
+    -L "$SHERPA_ONNX_LIB" \
+    -lsherpa-onnx-c-api \
+    -Xlinker -rpath -Xlinker "$SHERPA_ONNX_LIB" \
     "${FRAMEWORKS[@]}" \
     "${SOURCES[@]}" \
     -o "$OUTPUT" \
