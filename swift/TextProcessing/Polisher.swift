@@ -32,9 +32,46 @@ final class TextPolisher: TextPolisherProtocol {
 
     // MARK: - Instance method (protocol conformance)
 
-    /// Polish text using local regex rules.
+    /// Polish text: use LLM if configured, otherwise local regex.
     func polish(_ text: String) -> String {
+        // Check if LLM is configured
+        let config = Self.loadConfig()
+        let llmURL = config["llm_api_url"] as? String ?? ""
+
+        if !llmURL.isEmpty {
+            // Synchronous wrapper for async LLM call
+            let semaphore = DispatchSemaphore(value: 0)
+            var result = Self.polishLocal(text)
+
+            Task {
+                result = await Self.polishWithLLM(text, config: config)
+                semaphore.signal()
+            }
+
+            // Wait up to 15 seconds for LLM response
+            if semaphore.wait(timeout: .now() + 15) == .timedOut {
+                NSLog("[TextPolisher] LLM timeout, using local rules")
+                return Self.polishLocal(text)
+            }
+            return result
+        }
+
         return Self.polishLocal(text)
+    }
+
+    /// Load config from settings.json
+    private static func loadConfig() -> [String: Any] {
+        let configPaths = [
+            NSHomeDirectory() + "/Library/Application Support/VibeKeyboard/settings.json",
+            NSHomeDirectory() + "/voice-input-mac/config/settings.json",
+        ]
+        for path in configPaths {
+            if let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                return json
+            }
+        }
+        return [:]
     }
 
     // MARK: - Static Local Polish
