@@ -41,13 +41,15 @@ final class AudioRecorder: AudioRecorderProtocol {
 
     private let engine = AVAudioEngine()
     private let lock = NSLock()
+    private var converter: AVAudioConverter?
+    private var targetFormat: AVAudioFormat?
 
     // MARK: - Public API
 
     /// Start recording from the default microphone.
     ///
-    /// Audio is captured at 16kHz mono Int16 format.
-    /// Each chunk is delivered via `onAudioChunk` and also accumulated in `audioBuffer`.
+    /// Audio is captured at the hardware's native format, then converted to
+    /// 16kHz mono Int16 in the tap callback using AVAudioConverter.
     func start() {
         lock.lock()
         defer { lock.unlock() }
@@ -62,11 +64,11 @@ final class AudioRecorder: AudioRecorderProtocol {
         let inputNode = engine.inputNode
 
         // The hardware format — we'll convert from this
-        let hardwareFormat = inputNode.outputFormat(forBus: 0)
-        NSLog("[AudioRecorder] Hardware format: %@", hardwareFormat.description)
+        let nativeFormat = inputNode.outputFormat(forBus: 0)
+        NSLog("[AudioRecorder] Hardware format: %@", nativeFormat.description)
 
-        // Target format: 16kHz mono Float32 (AVAudioEngine operates in float)
-        guard let targetFormat = AVAudioFormat(
+        // Target format: 16kHz mono Float32 (we convert to Int16 after)
+        guard let target = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: Self.sampleRate,
             channels: Self.channels,
@@ -75,24 +77,36 @@ final class AudioRecorder: AudioRecorderProtocol {
             NSLog("[AudioRecorder] ERROR: Cannot create target audio format")
             return
         }
+        self.targetFormat = target
 
-        // Install a tap on the input node
-        // AVAudioEngine will resample from hardware format to our target format
+        // Create converter from native hardware format to 16kHz mono Float32
+        guard let conv = AVAudioConverter(from: nativeFormat, to: target) else {
+            NSLog("[AudioRecorder] ERROR: Cannot create AVAudioConverter from %@ to %@",
+                  nativeFormat.description, target.description)
+            return
+        }
+        self.converter = conv
+        NSLog("[AudioRecorder] Converter ready: %@ -> %@", nativeFormat.description, target.description)
+
+        // Install a tap with nil format = use the hardware's native format.
+        // This avoids the SIGABRT in AVAudioIONodeImpl::SetOutputFormat that
+        // occurs when requesting a format the input node cannot provide directly.
         inputNode.installTap(
             onBus: 0,
-            bufferSize: Self.bufferFrameSize,
-            format: targetFormat
+            bufferSize: 4096,
+            format: nil
         ) { [weak self] (buffer, time) in
-            self?.processAudioBuffer(buffer)
+            self?.convertAndProcess(buffer: buffer)
         }
 
         do {
             try engine.start()
             isRecording = true
-            NSLog("[AudioRecorder] Recording started (16kHz mono)")
+            NSLog("[AudioRecorder] Recording started (native -> 16kHz mono conversion)")
         } catch {
             NSLog("[AudioRecorder] ERROR: Failed to start engine: %@", error.localizedDescription)
             inputNode.removeTap(onBus: 0)
+            self.converter = nil
         }
     }
 
@@ -106,6 +120,7 @@ final class AudioRecorder: AudioRecorderProtocol {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         isRecording = false
+        converter = nil
         NSLog("[AudioRecorder] Recording stopped, buffer size: %d bytes", audioBuffer.count)
     }
 
@@ -140,8 +155,48 @@ final class AudioRecorder: AudioRecorderProtocol {
 
     // MARK: - Private
 
+    /// Convert audio buffer from native hardware format to 16kHz mono, then to Int16 PCM.
+    private func convertAndProcess(buffer: AVAudioPCMBuffer) {
+        guard let converter = self.converter,
+              let targetFormat = self.targetFormat else { return }
+
+        // Calculate how many output frames we need
+        let ratio = targetFormat.sampleRate / buffer.format.sampleRate
+        let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1
+
+        guard let outputBuffer = AVAudioPCMBuffer(
+            pcmFormat: targetFormat,
+            frameCapacity: outputFrameCapacity
+        ) else { return }
+
+        // Use AVAudioConverter to resample + downmix
+        var error: NSError?
+        var consumed = false
+        let status = converter.convert(to: outputBuffer, error: &error) { inNumPackets, outStatus in
+            if consumed {
+                outStatus.pointee = .noDataNow
+                return nil
+            }
+            consumed = true
+            outStatus.pointee = .haveData
+            return buffer
+        }
+
+        if status == .error {
+            if let error = error {
+                NSLog("[AudioRecorder] Conversion error: %@", error.localizedDescription)
+            }
+            return
+        }
+
+        guard outputBuffer.frameLength > 0 else { return }
+
+        // Convert Float32 to Int16 PCM
+        processFloat32Buffer(outputBuffer)
+    }
+
     /// Convert Float32 audio buffer to Int16 PCM and deliver
-    private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
+    private func processFloat32Buffer(_ buffer: AVAudioPCMBuffer) {
         guard let floatData = buffer.floatChannelData else { return }
 
         let frameCount = Int(buffer.frameLength)
