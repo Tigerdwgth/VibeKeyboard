@@ -10,11 +10,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Regular policy: both Dock icon and menubar icon visible.
-        // MenuBarExtra already creates the status item, but we want the app
-        // to also appear in the Dock for Cmd+Tab switching.
         NSApp.setActivationPolicy(.regular)
         requestMicrophonePermission()
+
+        // Remove unwanted system-injected menus (Debug, Instruments, etc.)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.removeUnwantedMenus()
+        }
+    }
+
+    /// Remove system-injected menus like "Instruments", "Debug" that macOS adds to ad-hoc signed apps.
+    private func removeUnwantedMenus() {
+        guard let mainMenu = NSApp.mainMenu else { return }
+        let unwanted: Set<String> = ["Instruments", "Debug"]
+        for item in mainMenu.items.reversed() {
+            if let title = item.submenu?.title, unwanted.contains(title) {
+                mainMenu.removeItem(item)
+                NSLog("[VibeKeyboard] Removed unwanted menu: %@", title)
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
