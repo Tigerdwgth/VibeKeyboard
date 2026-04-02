@@ -143,7 +143,12 @@ final class VibeKeyboardViewModel: ObservableObject {
 
     /// Start recording. Called by double-tap Option hotkey.
     func startRecording() {
-        guard !isRecording, isModelLoaded else { return }
+        // Double-tap Option while recording = confirm & paste (same as Enter)
+        if isRecording {
+            stopAndPaste()
+            return
+        }
+        guard isModelLoaded else { return }
 
         cancelHideTimer()
 
