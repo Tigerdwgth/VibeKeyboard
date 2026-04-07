@@ -34,44 +34,60 @@ final class TextPolisher: TextPolisherProtocol {
 
     /// Polish text: use LLM if configured, otherwise local regex.
     func polish(_ text: String) -> String {
-        // Check if LLM is configured
-        let config = Self.loadConfig()
-        let llmURL = config["llm_api_url"] as? String ?? ""
+        // Read config from ConfigManager (thread-safe reads of published values)
+        let llmURL: String
+        let llmKey: String
+        let llmModel: String
+        let llmPrompt: String
 
-        if !llmURL.isEmpty {
-            // Synchronous wrapper for async LLM call
-            let semaphore = DispatchSemaphore(value: 0)
-            var result = Self.polishLocal(text)
-
-            Task {
-                result = await Self.polishWithLLM(text, config: config)
-                semaphore.signal()
+        // ConfigManager is main-actor-bound; read values synchronously if on main, else dispatch
+        if Thread.isMainThread {
+            let cm = ConfigManager.shared
+            llmURL = cm.llmApiUrl
+            llmKey = cm.llmApiKey
+            llmModel = cm.llmModel
+            llmPrompt = cm.llmPrompt
+        } else {
+            var url = "", key = "", model = "", prompt = ""
+            DispatchQueue.main.sync {
+                let cm = ConfigManager.shared
+                url = cm.llmApiUrl
+                key = cm.llmApiKey
+                model = cm.llmModel
+                prompt = cm.llmPrompt
             }
-
-            // Wait up to 15 seconds for LLM response
-            if semaphore.wait(timeout: .now() + 15) == .timedOut {
-                NSLog("[TextPolisher] LLM timeout, using local rules")
-                return Self.polishLocal(text)
-            }
-            return result
+            llmURL = url
+            llmKey = key
+            llmModel = model
+            llmPrompt = prompt
         }
 
-        return Self.polishLocal(text)
-    }
+        guard !llmURL.isEmpty else {
+            return Self.polishLocal(text)
+        }
 
-    /// Load config from settings.json
-    private static func loadConfig() -> [String: Any] {
-        let configPaths = [
-            NSHomeDirectory() + "/Library/Application Support/VibeKeyboard/settings.json",
-            NSHomeDirectory() + "/voice-input-mac/config/settings.json",
+        let config: [String: Any] = [
+            "llm_api_url": llmURL,
+            "llm_api_key": llmKey,
+            "llm_model": llmModel,
+            "llm_prompt": llmPrompt,
         ]
-        for path in configPaths {
-            if let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                return json
-            }
+
+        // Synchronous wrapper for async LLM call
+        let semaphore = DispatchSemaphore(value: 0)
+        var result = Self.polishLocal(text)
+
+        Task.detached {
+            result = await Self.polishWithLLM(text, config: config)
+            semaphore.signal()
         }
-        return [:]
+
+        // Wait up to 15 seconds for LLM response
+        if semaphore.wait(timeout: .now() + 15) == .timedOut {
+            NSLog("[TextPolisher] LLM timeout, using local rules")
+            return Self.polishLocal(text)
+        }
+        return result
     }
 
     // MARK: - Static Local Polish
@@ -106,20 +122,27 @@ final class TextPolisher: TextPolisherProtocol {
         let apiURL = config["llm_api_url"] as? String ?? "http://localhost:1234/v1"
         let apiKey = config["llm_api_key"] as? String ?? "lm-studio"
         let model = config["llm_model"] as? String ?? ""
+        let promptTemplate = config["llm_prompt"] as? String ?? ""
 
-        let prompt = """
-        处理以下语音识别文本，严格遵守规则：
+        // Use custom prompt if available, substituting {text} placeholder
+        let prompt: String
+        if !promptTemplate.isEmpty && promptTemplate.contains("{text}") {
+            prompt = promptTemplate.replacingOccurrences(of: "{text}", with: text)
+        } else {
+            prompt = """
+            处理以下语音识别文本，严格遵守规则：
 
-        规则：
-        - 删除语气词（呃、嗯、啊、哎、额、哦）和口头禅（那个、就是、然后）
-        - 严禁改写、换词、总结、添加任何内容，只能删除不能增改
-        - 如果内容包含多个要点/需求/步骤，拆分成编号列表（1. 2. 3.），每条保留原话
-        - 如果只有一个意思，直接输出删除语气词后的原文
-        - 只输出结果，不要解释
+            规则：
+            - 删除语气词（呃、嗯、啊、哎、额、哦）和口头禅（那个、就是、然后）
+            - 严禁改写、换词、总结、添加任何内容，只能删除不能增改
+            - 如果内容包含多个要点/需求/步骤，拆分成编号列表（1. 2. 3.），每条保留原话
+            - 如果只有一个意思，直接输出删除语气词后的原文
+            - 只输出结果，不要解释
 
-        原文：\(text)
-        处理后：
-        """
+            原文：\(text)
+            处理后：
+            """
+        }
 
         let endpoint = apiURL.hasSuffix("/") ? "\(apiURL)chat/completions" : "\(apiURL)/chat/completions"
 

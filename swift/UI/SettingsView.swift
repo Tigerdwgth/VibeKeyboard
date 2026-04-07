@@ -33,7 +33,7 @@ struct SettingsView: View {
                     Label("About", systemImage: "info.circle")
                 }
         }
-        .frame(width: 480, height: 400)
+        .frame(width: 480, height: 520)
     }
 }
 
@@ -230,6 +230,20 @@ private struct HotwordsSettingsTab: View {
 
 // MARK: - LLM Tab
 
+private let defaultLLMPrompt = """
+    处理以下语音识别文本，严格遵守规则：
+
+    规则：
+    - 删除语气词（呃、嗯、啊、哎、额、哦）和口头禅（那个、就是、然后）
+    - 严禁改写、换词、总结、添加任何内容，只能删除不能增改
+    - 如果内容包含多个要点/需求/步骤，拆分成编号列表（1. 2. 3.），每条保留原话
+    - 如果只有一个意思，直接输出删除语气词后的原文
+    - 只输出结果，不要解释
+
+    原文：{text}
+    处理后：
+    """
+
 private struct LLMSettingsTab: View {
     @ObservedObject var config: ConfigManager
 
@@ -264,10 +278,35 @@ private struct LLMSettingsTab: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Configure an OpenAI-compatible API to polish recognized text.")
-                    Text("Leave the URL empty to use local regex rules only (recommended).")
+                    Text("Leave the URL empty to use local regex rules only.")
+                    Text("All LLM requests are sent to the URL above — use a local model (LM Studio / Ollama) for full privacy.")
                 }
                 .font(.caption)
                 .foregroundColor(.secondary)
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Prompt Template")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Button("Reset to Default") {
+                            config.llmPrompt = defaultLLMPrompt
+                        }
+                        .font(.caption)
+                    }
+                    TextEditor(text: $config.llmPrompt)
+                        .font(.system(size: 12, design: .monospaced))
+                        .frame(minHeight: 120, maxHeight: 200)
+                        .border(Color.secondary.opacity(0.3), width: 1)
+                    Text("Use {text} as placeholder for the recognized text.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } header: {
+                Text("Prompt")
             }
         }
         .formStyle(.grouped)

@@ -325,6 +325,17 @@ final class OverlayWindow {
         }
     }
 
+    /// Hide the overlay instantly without animation.
+    /// Used before pasting to avoid the animation delay interfering with
+    /// target app activation timing.
+    func hideInstant() {
+        ensureMainThread { [self] in
+            guard let win = window else { return }
+            win.alphaValue = 0.0
+            win.orderOut(nil)
+        }
+    }
+
     // MARK: - Thread Safety
 
     private func ensureMainThread(_ work: @escaping () -> Void) {

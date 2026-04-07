@@ -2,10 +2,23 @@
 
 macOS 本地语音输入工具。双击 Option 开始说话，实时显示识别结果，回车确认自动粘贴。完全离线，无需云端 API。
 
-A local voice input tool for macOS. Double-tap Option to speak, see real-time transcription, press Enter to paste. Fully offline, no cloud API needed.
+A **privacy-first** voice input tool for macOS. Double-tap Option to speak, see real-time transcription, press Enter to paste. **100% local, fully offline** — no cloud API, no data upload, no account required.
+
+## Privacy & Local Deployment
+
+**VibeKeyboard 完全在本地运行，你的语音数据永远不会离开你的设备。**
+
+- **零网络依赖** — ASR 模型（SenseVoice-ONNX）在本地推理，无需联网，无需云端 API
+- **无数据上传** — 录音、识别结果、剪贴板内容均不会发送到任何服务器
+- **无账户要求** — 不需要注册、登录或 API Key 即可使用全部功能
+- **可选 LLM 润色** — 如需文本润色，可配置本地 LLM（如 LM Studio / Ollama），同样不经过云端
+- **开源透明** — 完整源码公开，你可以审计每一行代码确认无隐私风险
+
+> 与市面上依赖云端 API 的语音输入工具不同，VibeKeyboard 将隐私作为第一优先级。即使在完全断网的环境下，VibeKeyboard 也能正常工作。
 
 ## Features
 
+- **100% local & offline** — All speech recognition runs on-device, no cloud API, no data leaves your Mac
 - **Real-time streaming recognition** — See transcription update live as you speak (0.2s refresh)
 - **Chinese-English mixed input** — Seamlessly switch between Mandarin and English
 - **Three ASR backends** — SenseVoice-ONNX (fastest, default), SenseVoice-FunASR, Paraformer (hotword support)
@@ -16,7 +29,7 @@ A local voice input tool for macOS. Double-tap Option to speak, see real-time tr
 - **ESC to cancel** — Abort recording anytime without pasting
 - **Native macOS app** — Menubar icon, Dock icon, frosted glass overlay, system notifications
 - **Settings UI** — WKWebView-based modern settings window (Cmd+,)
-- **Privacy first** — Everything runs locally on your Mac, no data leaves your device
+- **Optional local LLM polish** — Connect to local LLM (LM Studio / Ollama) for text refinement, still fully offline
 
 ## How It Works
 

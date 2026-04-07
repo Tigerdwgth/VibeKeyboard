@@ -120,9 +120,18 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
 PLIST
 echo "  [OK] Info.plist + PkgInfo"
 
-# Step 8: Ad-hoc code sign
-codesign --force --deep --sign - "$APP_DIR"
-echo "  [OK] Codesigned (ad-hoc)"
+# Step 8: Code sign (prefer stable certificate over ad-hoc)
+CERT_NAME="VibeKeyboard Developer"
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "$CERT_NAME"; then
+    codesign --force --deep --sign "$CERT_NAME" "$APP_DIR"
+    echo "  [OK] Codesigned (certificate: $CERT_NAME)"
+    echo "  NOTE: Accessibility permissions will survive rebuilds."
+else
+    codesign --force --deep --sign - "$APP_DIR"
+    echo "  [OK] Codesigned (ad-hoc)"
+    echo "  WARNING: Ad-hoc signing — accessibility permissions reset on each rebuild."
+    echo "  Run 'bash setup-signing.sh' once to create a stable certificate."
+fi
 
 # Summary
 echo ""

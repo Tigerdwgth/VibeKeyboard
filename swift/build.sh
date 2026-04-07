@@ -23,6 +23,7 @@ SOURCES=(
     "$SCRIPT_DIR/App/VibeKeyboardApp.swift"
     "$SCRIPT_DIR/App/VibeKeyboardViewModel.swift"
     "$SCRIPT_DIR/App/AppDelegate.swift"
+    "$SCRIPT_DIR/App/FileLogger.swift"
     # ASR engine
     "$SCRIPT_DIR/ASR/SherpaEngine.swift"
     # Audio recording

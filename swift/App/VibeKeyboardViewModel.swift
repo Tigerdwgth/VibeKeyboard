@@ -55,6 +55,9 @@ final class VibeKeyboardViewModel: ObservableObject {
     private var hideTimer: Timer?
     private var streamTimer: Timer?
 
+    /// The app that was frontmost when recording started — paste goes here.
+    private var targetApp: NSRunningApplication?
+
     /// The overlay window instance (AppKit, not SwiftUI).
     private lazy var overlay: OverlayWindow = {
         let fontSize = CGFloat(configManager.overlayFontSize)
@@ -152,6 +155,9 @@ final class VibeKeyboardViewModel: ObservableObject {
 
         cancelHideTimer()
 
+        // Save the frontmost app so we can paste back to it later
+        targetApp = NSWorkspace.shared.frontmostApplication
+
         isRecording = true
         appState = .recording
         statusText = "Recording..."
@@ -167,11 +173,17 @@ final class VibeKeyboardViewModel: ObservableObject {
         // Start streaming recognition timer (every 0.2s)
         startStreamTimer()
 
-        NSLog("[VibeKeyboard] Recording started")
+        FileLogger.log("[VibeKeyboard] Recording started, target=\(targetApp?.localizedName ?? "nil")")
     }
 
     /// Stop recording, format/polish the text, paste it, and hide overlay.
     /// Called by Enter key.
+    ///
+    /// IMPORTANT: We hide the overlay BEFORE pasting so that our floating window
+    /// does not interfere with target app activation. The overlay uses
+    /// `hidesOnDeactivate = false` and `.transient` collection behavior,
+    /// so hiding it should not steal focus. We order it out first, then
+    /// trigger the paste on a background queue.
     func stopAndPaste() {
         stopLock.lock()
         guard isRecording else {
@@ -185,25 +197,31 @@ final class VibeKeyboardViewModel: ObservableObject {
         audioRecorder.stop()
 
         let text = lastStreamText
-        overlay.hide()
+
+        // Hide overlay immediately so it doesn't compete for activation.
+        // Use orderOut (instant) instead of animated hide to avoid timing issues.
+        overlay.hideInstant()
         overlayVisible = false
         appState = .idle
         statusText = "Idle (double-tap Option to record)"
 
+        let target = targetApp
+        FileLogger.log("[VibeKeyboard] Recording stopped. text=\(text.isEmpty ? "(empty)" : String(text.prefix(40))), target=\(target?.localizedName ?? "nil")")
+
         if !text.isEmpty {
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                self?.quickPaste(text)
+                self?.quickPaste(text, target: target)
             }
         } else {
             let audioData = audioBuffer
             if !audioData.isEmpty {
                 DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                    self?.fullTranscribe(audioData)
+                    self?.fullTranscribe(audioData, target: target)
                 }
+            } else {
+                FileLogger.log("[VibeKeyboard] No text and no audio data, nothing to paste")
             }
         }
-
-        NSLog("[VibeKeyboard] Recording stopped, pasting")
     }
 
     /// Cancel recording without pasting. Called by ESC key.
@@ -273,15 +291,15 @@ final class VibeKeyboardViewModel: ObservableObject {
 
     // MARK: - Transcription & Pasting
 
-    private func quickPaste(_ text: String) {
+    private func quickPaste(_ text: String, target: NSRunningApplication?) {
         let formatted = formatter.format(text)
         let polished = polisher.polish(formatted)
 
-        NSLog("[VibeKeyboard] Quick paste: %@", polished)
-        textInserter.insertText(polished)
+        FileLogger.log("[VibeKeyboard] Quick paste: \(polished)")
+        textInserter.insertText(polished, activating: target)
     }
 
-    private func fullTranscribe(_ audioData: Data) {
+    private func fullTranscribe(_ audioData: Data, target: NSRunningApplication? = nil) {
         DispatchQueue.main.async { [weak self] in
             self?.appState = .processing
             self?.statusText = "Transcribing..."
@@ -307,7 +325,7 @@ final class VibeKeyboardViewModel: ObservableObject {
             self?.statusText = "Idle (double-tap Option to record)"
         }
 
-        textInserter.insertText(polished)
+        textInserter.insertText(polished, activating: target)
     }
 
     // MARK: - Timer Helpers
@@ -361,6 +379,7 @@ protocol SherpaEngineProtocol: AnyObject {
 
 protocol TextInserterProtocol: AnyObject {
     func insertText(_ text: String)
+    func insertText(_ text: String, activating app: NSRunningApplication?)
 }
 
 protocol HotkeyListenerProtocol: AnyObject {

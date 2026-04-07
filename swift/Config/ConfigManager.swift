@@ -71,6 +71,10 @@ final class ConfigManager: ObservableObject {
         didSet { save() }
     }
 
+    @Published var llmPrompt: String {
+        didSet { save() }
+    }
+
     // MARK: - ASR
 
     @Published var asrBackend: String {
@@ -110,6 +114,19 @@ final class ConfigManager: ObservableObject {
         llmApiUrl = ""
         llmModel = ""
         llmApiKey = ""
+        llmPrompt = """
+            处理以下语音识别文本，严格遵守规则：
+
+            规则：
+            - 删除语气词（呃、嗯、啊、哎、额、哦）和口头禅（那个、就是、然后）
+            - 严禁改写、换词、总结、添加任何内容，只能删除不能增改
+            - 如果内容包含多个要点/需求/步骤，拆分成编号列表（1. 2. 3.），每条保留原话
+            - 如果只有一个意思，直接输出删除语气词后的原文
+            - 只输出结果，不要解释
+
+            原文：{text}
+            处理后：
+            """
         asrBackend = "sherpa-sensevoice"
         hotwords = []
 
@@ -134,6 +151,7 @@ final class ConfigManager: ObservableObject {
             if let v = dict["llm_api_url"] as? String { llmApiUrl = v }
             if let v = dict["llm_model"] as? String { llmModel = v }
             if let v = dict["llm_api_key"] as? String { llmApiKey = v }
+            if let v = dict["llm_prompt"] as? String { llmPrompt = v }
 
             if let formatting = dict["formatting"] as? [String: Any] {
                 if let v = formatting["auto_spacing"] as? Bool { autoSpacing = v }
@@ -154,6 +172,7 @@ final class ConfigManager: ObservableObject {
             "llm_api_url": llmApiUrl,
             "llm_model": llmModel,
             "llm_api_key": llmApiKey,
+            "llm_prompt": llmPrompt,
             "formatting": [
                 "auto_spacing": autoSpacing,
                 "capitalize": capitalize,
