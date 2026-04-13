@@ -34,43 +34,23 @@ final class TextPolisher: TextPolisherProtocol {
 
     /// Polish text: use LLM if configured, otherwise local regex.
     func polish(_ text: String) -> String {
-        // Read config from ConfigManager (thread-safe reads of published values)
-        let llmURL: String
-        let llmKey: String
-        let llmModel: String
-        let llmPrompt: String
-
-        // ConfigManager is main-actor-bound; read values synchronously if on main, else dispatch
+        // Read LLM config snapshot (thread-safe)
+        let cfg: ConfigManager.LLMConfig
         if Thread.isMainThread {
-            let cm = ConfigManager.shared
-            llmURL = cm.llmApiUrl
-            llmKey = cm.llmApiKey
-            llmModel = cm.llmModel
-            llmPrompt = cm.llmPrompt
+            cfg = ConfigManager.shared.llmConfig
         } else {
-            var url = "", key = "", model = "", prompt = ""
-            DispatchQueue.main.sync {
-                let cm = ConfigManager.shared
-                url = cm.llmApiUrl
-                key = cm.llmApiKey
-                model = cm.llmModel
-                prompt = cm.llmPrompt
-            }
-            llmURL = url
-            llmKey = key
-            llmModel = model
-            llmPrompt = prompt
+            cfg = DispatchQueue.main.sync { ConfigManager.shared.llmConfig }
         }
 
-        guard !llmURL.isEmpty else {
+        guard cfg.enabled, !cfg.apiUrl.isEmpty else {
             return Self.polishLocal(text)
         }
 
         let config: [String: Any] = [
-            "llm_api_url": llmURL,
-            "llm_api_key": llmKey,
-            "llm_model": llmModel,
-            "llm_prompt": llmPrompt,
+            "llm_api_url": cfg.apiUrl,
+            "llm_api_key": cfg.apiKey,
+            "llm_model": cfg.model,
+            "llm_prompt": cfg.prompt,
         ]
 
         // Synchronous wrapper for async LLM call

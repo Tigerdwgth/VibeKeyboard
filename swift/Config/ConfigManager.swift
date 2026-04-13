@@ -59,6 +59,10 @@ final class ConfigManager: ObservableObject {
 
     // MARK: - LLM
 
+    @Published var llmEnabled: Bool {
+        didSet { save() }
+    }
+
     @Published var llmApiUrl: String {
         didSet { save() }
     }
@@ -87,7 +91,22 @@ final class ConfigManager: ObservableObject {
         didSet { saveHotwords() }
     }
 
-    // MARK: - Derived
+    // MARK: - Derived (must be read on main thread)
+
+    /// Snapshot of LLM-related config for thread-safe reads.
+    struct LLMConfig {
+        let enabled: Bool
+        let apiUrl: String
+        let apiKey: String
+        let model: String
+        let prompt: String
+    }
+
+    var llmConfig: LLMConfig {
+        LLMConfig(enabled: llmEnabled, apiUrl: llmApiUrl, apiKey: llmApiKey, model: llmModel, prompt: llmPrompt)
+    }
+
+    // MARK: - Derived (legacy)
 
     var formattingConfig: [String: Any] {
         [
@@ -111,6 +130,7 @@ final class ConfigManager: ObservableObject {
         overlayFontSize = 16
         autoSpacing = true
         capitalize = true
+        llmEnabled = false
         llmApiUrl = ""
         llmModel = ""
         llmApiKey = ""
@@ -148,6 +168,7 @@ final class ConfigManager: ObservableObject {
             if let v = dict["max_duration"] as? Double { maxDuration = v }
             if let v = dict["overlay_font_size"] as? Int { overlayFontSize = v }
             if let v = dict["asr_backend"] as? String { asrBackend = v }
+            if let v = dict["llm_enabled"] as? Bool { llmEnabled = v }
             if let v = dict["llm_api_url"] as? String { llmApiUrl = v }
             if let v = dict["llm_model"] as? String { llmModel = v }
             if let v = dict["llm_api_key"] as? String { llmApiKey = v }
@@ -169,6 +190,7 @@ final class ConfigManager: ObservableObject {
             "max_duration": maxDuration,
             "overlay_font_size": overlayFontSize,
             "asr_backend": asrBackend,
+            "llm_enabled": llmEnabled,
             "llm_api_url": llmApiUrl,
             "llm_model": llmModel,
             "llm_api_key": llmApiKey,

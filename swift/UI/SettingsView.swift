@@ -250,12 +250,23 @@ private struct LLMSettingsTab: View {
     var body: some View {
         Form {
             Section {
+                Toggle("Enable LLM Polish", isOn: $config.llmEnabled)
+            } header: {
+                Text("LLM Polish")
+            } footer: {
+                Text("When disabled, only local regex rules (filler word removal) are applied.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("API URL")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     TextField("http://localhost:1234/v1", text: $config.llmApiUrl)
                         .textFieldStyle(.roundedBorder)
+                        .disabled(!config.llmEnabled)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -264,6 +275,7 @@ private struct LLMSettingsTab: View {
                         .foregroundColor(.secondary)
                     TextField("Leave empty for auto-select", text: $config.llmModel)
                         .textFieldStyle(.roundedBorder)
+                        .disabled(!config.llmEnabled)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -272,6 +284,7 @@ private struct LLMSettingsTab: View {
                         .foregroundColor(.secondary)
                     SecureField("Optional (local models don't need one)", text: $config.llmApiKey)
                         .textFieldStyle(.roundedBorder)
+                        .disabled(!config.llmEnabled)
                 }
             } header: {
                 Text("LLM Polish (Optional)")

@@ -140,6 +140,10 @@ echo "Location: $APP_DIR"
 echo "Size: $(du -sh "$APP_DIR" | cut -f1)"
 echo ""
 
+# Step 9: Reset accessibility TCC entry (ad-hoc signing invalidates old CDHash)
+tccutil reset Accessibility com.gsj.vibekeyboard 2>/dev/null && \
+    echo "  [OK] Reset accessibility TCC (re-grant needed after launch)" || true
+
 if [ "$RUN_AFTER" = true ]; then
     echo "=== Launching ==="
     pkill -f "VibeKeyboard" 2>/dev/null || true
