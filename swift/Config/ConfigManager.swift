@@ -10,6 +10,12 @@ import SwiftUI
 /// Manages application configuration with JSON persistence and SwiftUI bindings.
 final class ConfigManager: ObservableObject {
 
+    /// Thread-safe read from the shared ConfigManager (dispatches to main if needed).
+    static func readSync<T>(_ block: @escaping (ConfigManager) -> T) -> T {
+        if Thread.isMainThread { return block(shared) }
+        return DispatchQueue.main.sync { block(shared) }
+    }
+
     static let shared = ConfigManager()
 
     private let configDir: URL
@@ -85,6 +91,10 @@ final class ConfigManager: ObservableObject {
         didSet { save() }
     }
 
+    @Published var asrLanguage: String {
+        didSet { save() }
+    }
+
     // MARK: - Hotwords
 
     @Published var hotwords: [String] {
@@ -148,6 +158,7 @@ final class ConfigManager: ObservableObject {
             处理后：
             """
         asrBackend = "sherpa-sensevoice"
+        asrLanguage = "auto"
         hotwords = []
 
         loadFromFile()
@@ -168,6 +179,7 @@ final class ConfigManager: ObservableObject {
             if let v = dict["max_duration"] as? Double { maxDuration = v }
             if let v = dict["overlay_font_size"] as? Int { overlayFontSize = v }
             if let v = dict["asr_backend"] as? String { asrBackend = v }
+            if let v = dict["asr_language"] as? String { asrLanguage = v }
             if let v = dict["llm_enabled"] as? Bool { llmEnabled = v }
             if let v = dict["llm_api_url"] as? String { llmApiUrl = v }
             if let v = dict["llm_model"] as? String { llmModel = v }
@@ -190,6 +202,7 @@ final class ConfigManager: ObservableObject {
             "max_duration": maxDuration,
             "overlay_font_size": overlayFontSize,
             "asr_backend": asrBackend,
+            "asr_language": asrLanguage,
             "llm_enabled": llmEnabled,
             "llm_api_url": llmApiUrl,
             "llm_model": llmModel,

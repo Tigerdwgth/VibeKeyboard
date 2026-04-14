@@ -82,10 +82,20 @@ private struct RecordingSettingsTab: View {
                             .foregroundColor(.secondary)
                             .monospacedDigit()
                     }
-                    Slider(value: $config.maxDuration, in: 5...120, step: 5) {
+                    Slider(value: $config.maxDuration, in: 10...600, step: 10) {
                         Text("Max Duration")
                     }
+                    Text("Set to 600s for virtually unlimited recording.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
+
+                Picker("Language", selection: $config.asrLanguage) {
+                    Text("Auto (中英混合)").tag("auto")
+                    Text("Chinese (纯中文)").tag("zh")
+                    Text("English (纯英文)").tag("en")
+                }
+                .pickerStyle(.menu)
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {

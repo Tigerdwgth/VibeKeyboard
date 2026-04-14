@@ -166,6 +166,7 @@ final class VibeKeyboardViewModel: ObservableObject {
         lastStreamText = ""
         currentText = ""
 
+        NSSound(named: "Tink")?.play()
         audioRecorder.start()
         overlay.show(text: "", showIndicator: true)
         overlayVisible = true
@@ -198,29 +199,35 @@ final class VibeKeyboardViewModel: ObservableObject {
 
         let text = lastStreamText
 
-        // Hide overlay immediately so it doesn't compete for activation.
-        // Use orderOut (instant) instead of animated hide to avoid timing issues.
-        overlay.hideInstant()
-        overlayVisible = false
-        appState = .idle
-        statusText = "Idle (double-tap Option to record)"
+        NSSound(named: "Pop")?.play()
+        appState = .processing
+        statusText = "Finalizing..."
 
         let target = targetApp
-        FileLogger.log("[VibeKeyboard] Recording stopped. text=\(text.isEmpty ? "(empty)" : String(text.prefix(40))), target=\(target?.localizedName ?? "nil")")
+        let audioData = audioBuffer
 
-        if !text.isEmpty {
+        // Always do a final full transcription on the complete audio buffer.
+        // Streaming recognition lags ~0.2s behind, so the last few characters
+        // are often missing from lastStreamText.
+        if !audioData.isEmpty {
+            FileLogger.log("[VibeKeyboard] Recording stopped. Doing final transcription on full audio (\(audioData.count) bytes), target=\(target?.localizedName ?? "nil")")
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self else { return }
+                let finalText = self.sherpaEngine.transcribe(audioData: audioData)
+                let textToUse = (finalText?.isEmpty == false) ? finalText! : text
+                if !textToUse.isEmpty {
+                    self.quickPaste(textToUse, target: target)
+                } else {
+                    FileLogger.log("[VibeKeyboard] No speech detected in final transcription")
+                }
+            }
+        } else if !text.isEmpty {
+            FileLogger.log("[VibeKeyboard] Recording stopped. No audio buffer, using stream text: \(String(text.prefix(40)))")
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 self?.quickPaste(text, target: target)
             }
         } else {
-            let audioData = audioBuffer
-            if !audioData.isEmpty {
-                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                    self?.fullTranscribe(audioData, target: target)
-                }
-            } else {
-                FileLogger.log("[VibeKeyboard] No text and no audio data, nothing to paste")
-            }
+            FileLogger.log("[VibeKeyboard] No text and no audio data, nothing to paste")
         }
     }
 
@@ -291,12 +298,48 @@ final class VibeKeyboardViewModel: ObservableObject {
 
     // MARK: - Transcription & Pasting
 
+    /// Hotword + language config snapshot.
+    private typealias ASRConfig = (hotwords: String, language: String)
+
+    private func asrConfig() -> ASRConfig {
+        ConfigManager.readSync { cm in
+            (cm.hotwords.joined(separator: " "), cm.asrLanguage)
+        }
+    }
+
+    /// Transcribe using hotword model if available, else standard sherpa-onnx.
+    private func transcribeWithHotwords(_ audioData: Data, config cfg: ASRConfig) -> String? {
+        if !cfg.hotwords.isEmpty,
+           let engine = sherpaEngine as? SherpaEngine,
+           engine.isHotwordAvailable {
+            return engine.transcribeWithHotwords(
+                audioData: audioData,
+                hotwords: cfg.hotwords,
+                language: cfg.language
+            )
+        }
+        return sherpaEngine.transcribe(audioData: audioData)
+    }
+
     private func quickPaste(_ text: String, target: NSRunningApplication?) {
         let formatted = formatter.format(text)
         let polished = polisher.polish(formatted)
 
+        // Show final text in overlay briefly, then hide
+        DispatchQueue.main.async { [weak self] in
+            self?.overlay.updateText(polished)
+        }
+
         FileLogger.log("[VibeKeyboard] Quick paste: \(polished)")
         textInserter.insertText(polished, activating: target)
+
+        // Hide overlay after paste
+        DispatchQueue.main.async { [weak self] in
+            self?.overlay.hide()
+            self?.overlayVisible = false
+            self?.appState = .idle
+            self?.statusText = "Idle (double-tap Option to record)"
+        }
     }
 
     private func fullTranscribe(_ audioData: Data, target: NSRunningApplication? = nil) {
@@ -305,7 +348,7 @@ final class VibeKeyboardViewModel: ObservableObject {
             self?.statusText = "Transcribing..."
         }
 
-        guard let text = sherpaEngine.transcribe(audioData: audioData), !text.isEmpty else {
+        guard let text = transcribeWithHotwords(audioData, config: asrConfig()), !text.isEmpty else {
             DispatchQueue.main.async { [weak self] in
                 self?.overlay.updateText("(No speech detected)")
                 self?.scheduleHide(delay: 1.5)
